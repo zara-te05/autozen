@@ -1,0 +1,363 @@
+﻿================================================================================
+           GUIA DE ARQUITECTURA MVC EN FLUTTER - PROYECTO AUTOZEN
+================================================================================
+
+1. QUE ES EL PATRON MVC?
+--------------------------------------------------------------------------------
+El patron MVC (Modelo - Vista - Controlador) es un patron de diseno arquitectonico 
+que separa una aplicacion en tres componentes principales con responsabilidades bien 
+definidas:
+
+  1. Modelo (Model): Que datos maneja la aplicacion y sus reglas de negocio.
+  2. Vista (View): Como se muestran los datos al usuario (la interfaz grafica).
+  3. Controlador (Controller): Como interactuan el Modelo y la Vista ante las 
+     acciones del usuario (la logica de control y estado).
+
+En el contexto de Flutter, este patron nos permite:
+- Evitar que los widgets contengan logica pesada o llamadas directas a APIs.
+- Hacer que el codigo sea testeable, modular y facil de mantener.
+- Facilitar el trabajo en equipo (disenadores de UI y desarrolladores de logica 
+  pueden trabajar en paralelo sin colisionar).
+
+
+================================================================================
+2. ESTRUCTURA DE CARPETAS ORGANIZADA (DENTRO DE lib/)
+================================================================================
+
+lib/
+│
+├── controllers/      --> Logica de control, gestion de estado y eventos de UI
+├── dtos/             --> Objetos de transferencia de datos (Data Transfer Objects)
+├── models/           --> Entidades y modelos de datos principales del dominio
+├── services/         --> Comunicacion con APIs, bases de datos y servicios externos
+├── views/            --> Pantallas e interfaces completas (Screens / Vistas)
+├── pages/            --> Pantallas de la aplicacion (usado comunmente como sinonimo de views)
+├── widgets/          --> Componentes visuales reutilizables (botones, tarjetas, inputs)
+├── utils/            --> Constantes, rutas, temas, formateadores y funciones de ayuda
+└── main.dart         --> Punto de entrada de la aplicacion Flutter
+
+
+================================================================================
+3. DESCRIPCION DETALLADA DE CADA CARPETA
+================================================================================
+
+--------------------------------------------------------------------------------
+A) lib/models/ (MODELOS DE DATOS / ENTIDADES)
+--------------------------------------------------------------------------------
+Que es?
+Es la representacion interna de los datos del negocio. Define los objetos del mundo real 
+o del dominio de tu aplicacion (por ejemplo: Usuario, Vehiculo, Cita, Notificacion).
+
+Que lleva?
+- Clases con propiedades fuertemente tipadas (ej: id, name, email, createdAt).
+- Constructores estandar y con nombre (ej: constructores constantes).
+- Metodos de serializacion y deserializacion:
+  - factory Model.fromJson(Map<String, dynamic> json)
+  - Map<String, dynamic> toJson()
+- Metodos de utilidad de inmutabilidad como copyWith().
+- Validaciones basicas de integridad de los datos.
+
+Que NO debe llevar?
+- Widgets de Flutter (BuildContext, Widget, Container, etc.).
+- Llamadas HTTP o consultas directas a bases de datos.
+- Logica de navegacion.
+
+Ejemplo tipico:
+- vehicle_model.dart
+- user_model.dart
+
+
+--------------------------------------------------------------------------------
+B) lib/views/ (y lib/pages/) (VISTAS / PANTALLAS)
+--------------------------------------------------------------------------------
+Que es?
+Es la capa de presentacion que ve y con la que interactua el usuario. En Flutter, 
+representa las pantallas completas (Screens / Pages) de la aplicacion.
+
+Que lleva?
+- Widgets de pantalla completa que suelen contener un Scaffold, AppBar, etc.
+- Disposicion visual (Layouts: Column, Row, ListView, GridView).
+- Invocacion de metodos del controlador ante eventos del usuario (ej: onPressed: controller.login).
+- Escucha o suscripcion a los cambios del controlador (ej: usando ListenableBuilder, 
+  AnimatedBuilder, ValueListenableBuilder o Provider/Bloc/GetX segun el gestor de estado).
+
+Que NO debe llevar?
+- Peticiones HTTP directas (ej: http.get(...)).
+- Logica de calculo o reglas de negocio complejas.
+- Manipulacion directa de bases de datos.
+
+Nota sobre pages/ vs iews/:
+En Flutter son esencialmente lo mismo. Puedes usar iews/ para seguir la nomenclatura 
+estricta de MVC y widgets/ para componentes internos, o mantener pantallas completas 
+en iews/ o pages/.
+
+
+--------------------------------------------------------------------------------
+C) lib/controllers/ (CONTROLADORES)
+--------------------------------------------------------------------------------
+Que es?
+Es el cerebro intermediario. Conecta la Vista con los Servicios y Modelos. Reacciona a 
+las interacciones del usuario y actualiza el estado para que la Vista se redibuje.
+
+Que lleva?
+- Variables de estado (ej: lista de elementos, estado de carga isLoading, mensaje de error).
+- Notificacion de cambios a las vistas (por ejemplo heredando de ChangeNotifier y llamando a notifyListeners()).
+- Metodos que disparan los botones o formularios (ej: fetchVehicles(), submitLogin()).
+- Invocacion a los metodos de la capa services/ y actualizacion de los models/.
+- Manejo de excepciones y errores para notificarlos a la vista de manera amigable.
+
+Que NO debe llevar?
+- Codigo de pintado de widgets (evitar retornar Widget, Column, Text desde aqui).
+- Acceso directo a APIs sin pasar por un servicio.
+
+Ejemplo tipico:
+- auth_controller.dart
+- vehicle_controller.dart
+
+
+--------------------------------------------------------------------------------
+D) lib/services/ (SERVICIOS EXTERNOS Y ACCESO A DATOS)
+--------------------------------------------------------------------------------
+Que es?
+Es la capa encargada de interactuar con el mundo exterior: APIs REST, bases de datos locales 
+(SQLite, Hive), almacenamiento seguro, Firebase, Bluetooth, GPS, etc.
+
+Que lleva?
+- Metodos asincronos (Future<T>, Stream<T>).
+- Clientes HTTP (ej: peticiones GET, POST, PUT, DELETE).
+- Manejo de cabeceras (Headers), tokens de autorizacion (Bearer tokens).
+- Conexion con SDKs nativos o paquetes de terceros.
+- Parseo de respuestas crudas del servidor a Modelos o DTOs.
+
+Que NO debe llevar?
+- Estado de la interfaz ni variables de widgets.
+- Referencias a BuildContext o navegacion visual.
+
+Ejemplo tipico:
+- api_service.dart
+- auth_service.dart
+- local_storage_service.dart
+
+
+--------------------------------------------------------------------------------
+E) lib/dtos/ (DATA TRANSFER OBJECTS)
+--------------------------------------------------------------------------------
+Que es?
+Son objetos especificos disenados para transportar datos entre sistemas (tipicamente entre 
+la aplicacion movil y el servidor backend).
+
+Por que existen ademas de los Models?
+- A menudo la API devuelve o requiere una estructura diferente a la que usamos internamente 
+  en la app.
+- Permite desacoplar el modelo de dominio interno de los contratos cambiantes de la API.
+
+Que lleva?
+- Modelos de peticion (Request DTOs), por ejemplo: LoginRequestDto con email y password.
+- Modelos de respuesta (Response DTOs), por ejemplo: ApiResponseDto<T>, PaginatedResponseDto.
+- Metodos de serializacion toJson() / fromJson().
+
+Que NO debe llevar?
+- Logica de negocio ni metodos complejos.
+
+Ejemplo tipico:
+- login_request_dto.dart
+- register_request_dto.dart
+
+
+--------------------------------------------------------------------------------
+F) lib/widgets/ (COMPONENTES VISUALES REUTILIZABLES)
+--------------------------------------------------------------------------------
+Que es?
+Son piezas pequenas de interfaz que se repiten a lo largo de varias pantallas o que 
+se modularizan para no tener pantallas gigantescas (archivos de mas de 300 lineas).
+
+Que lleva?
+- Botones personalizados (ej: CustomButton).
+- Campos de texto con validaciones o estilos propios (ej: CustomTextField).
+- Tarjetas informativas (ej: VehicleCard).
+- Indicadores de carga personalizados, modales, banners de error.
+
+Que NO debe llevar?
+- Logica de negocio completa. Deben ser widgets presentacionales que 
+  reciben datos por parametros y emiten eventos a traves de callbacks (VoidCallback, Function(value)).
+
+
+--------------------------------------------------------------------------------
+G) lib/utils/ (UTILIDADES, CONFIGURACION Y RECURSOS COMUNES)
+--------------------------------------------------------------------------------
+Que es?
+Carpeta para codigo de soporte transversal que puede ser utilizado en cualquier parte 
+del proyecto.
+
+Que lleva?
+- constants.dart: Constantes globales (colores de marca, URLs base, claves de storage).
+- app_routes.dart: Definicion de rutas y nombres de navegacion.
+- app_theme.dart: Configuracion de temas claro y oscuro (ThemeData).
+- helpers/: Formateadores de fecha, moneda, validadores de cadenas (regex de email, etc.).
+
+
+================================================================================
+4. FLUJO DE DATOS Y COMUNICACION ENTRE CAPAS
+================================================================================
+
+1. El usuario pulsa un boton en la VISTA (iews/).
+2. La VISTA invoca una funcion del CONTROLADOR (controllers/).
+3. El CONTROLADOR activa el estado de carga (isLoading = true) y llama al SERVICIO (services/).
+4. El SERVICIO empaqueta los datos en un DTO (dtos/) y realiza la peticion HTTP a la API.
+5. La API responde. El SERVICIO procesa el JSON, crea instancias del MODELO (models/) y las 
+   retorna al CONTROLADOR.
+6. El CONTROLADOR almacena el MODELO, desactiva la carga (isLoading = false) y notifica a los oyentes.
+7. La VISTA detecta la notificacion y se redibuja mostrando los nuevos datos al usuario.
+
+   ┌─────────────────────────────────────────────────────────────┐
+   │                        USUARIO                              │
+   └──────────────────────────────┬──────────────────────────────┘
+                                  │ Interactua (Tap / Input)
+                                  ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │                     VISTA (views/)                          │
+   │  - Muestra UI y Widgets (widgets/)                          │
+   │  - Escucha cambios del Controlador                         │
+   └──────────────────────────────┬──────────────────────────────┘
+                                  │ Llama accion (ej: fetchVehicles)
+                                  ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │                 CONTROLADOR (controllers/)                  │
+   │  - Administra el estado (isLoading, error, lista)           │
+   │  - Notifica a la vista cuando los datos cambian             │
+   └──────────────────────────────┬──────────────────────────────┘
+                                  │ Pide datos
+                                  ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │                   SERVICIO (services/)                      │
+   │  - Envia DTO (dtos/) a la API / Base de Datos               │
+   │  - Recibe JSON y crea MODELOS (models/)                     │
+   └──────────────────────────────┬──────────────────────────────┘
+                                  │ Peticion HTTP / DB
+                                  ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │                  BACKEND / API / STORAGE                    │
+   └─────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+5. EJEMPLO PRACTICO DE IMPLEMENTACION (PASO A PASO)
+================================================================================
+
+1. MODELO (lib/models/vehicle_model.dart):
+--------------------------------------------
+class VehicleModel {
+  final String id;
+  final String brand;
+  final String model;
+  final int year;
+
+  VehicleModel({
+    required this.id,
+    required this.brand,
+    required this.model,
+    required this.year,
+  });
+
+  factory VehicleModel.fromJson(Map<String, dynamic> json) {
+    return VehicleModel(
+      id: json['id'] as String,
+      brand: json['brand'] as String,
+      model: json['model'] as String,
+      year: json['year'] as int,
+    );
+  }
+}
+
+2. SERVICIO (lib/services/vehicle_service.dart):
+-------------------------------------------------
+class VehicleService {
+  Future<List<VehicleModel>> getVehicles() async {
+    // Simulacion de llamada HTTP / API REST
+    await Future.delayed(const Duration(seconds: 1));
+    return [
+      VehicleModel(id: '1', brand: 'Toyota', model: 'Corolla', year: 2022),
+      VehicleModel(id: '2', brand: 'Honda', model: 'Civic', year: 2023),
+    ];
+  }
+}
+
+3. CONTROLADOR (lib/controllers/vehicle_controller.dart):
+-----------------------------------------------------------
+import 'package:flutter/foundation.dart';
+import '../models/vehicle_model.dart';
+import '../services/vehicle_service.dart';
+
+class VehicleController extends ChangeNotifier {
+  final VehicleService _service = VehicleService();
+
+  List<VehicleModel> vehicles = [];
+  bool isLoading = false;
+  String? errorMessage;
+
+  Future<void> loadVehicles() async {
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      vehicles = await _service.getVehicles();
+    } catch (e) {
+      errorMessage = 'Error al cargar vehiculos: ';
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+}
+
+4. VISTA (lib/views/vehicle_view.dart):
+----------------------------------------
+import 'package:flutter/material.dart';
+import '../controllers/vehicle_controller.dart';
+
+class VehicleView extends StatefulWidget {
+  const VehicleView({super.key});
+
+  @override
+  State<VehicleView> createState() => _VehicleViewState();
+}
+
+class _VehicleViewState extends State<VehicleView> {
+  final VehicleController _controller = VehicleController();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.loadVehicles();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Vehiculos AutoZen')),
+      body: ListenableBuilder(
+        listenable: _controller,
+        builder: (context, _) {
+          if (_controller.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (_controller.errorMessage != null) {
+            return Center(child: Text(_controller.errorMessage!));
+          }
+          return ListView.builder(
+            itemCount: _controller.vehicles.length,
+            itemBuilder: (context, index) {
+              final vehicle = _controller.vehicles[index];
+              return ListTile(
+                title: Text(' '),
+                subtitle: Text('Ano: '),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+================================================================================
