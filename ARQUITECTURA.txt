@@ -1,0 +1,72 @@
+﻿================================================================================
+          ARQUITECTURA DE AUTOZEN: FRONTEND (FLUTTER) + BACKEND (.NET)
+================================================================================
+
+1. DIVISION DE RESPONSABILIDADES
+--------------------------------------------------------------------------------
+El sistema esta desacoplado profesionalmente en dos capas independientes:
+
+  A) FRONTEND (Flutter / Dart):
+     - Corre en clientes: Android, Windows Desktop, iOS, Web.
+     - Responsabilidad UNICA: Interfaz de usuario (pantallas, botones, formularios,
+       tarjetas, tablas) y consumir la API REST del backend.
+     - NO tiene conexion a base de datos.
+     - NO tiene logica de servidor.
+
+  B) BACKEND (.NET 10 / C# / Dapper):
+     - Corre en servidor: Carpeta ackend/.
+     - Responsabilidad UNICA: Conectarse a PostgreSQL, ejecutar queries SQL rapidos
+       mediante Dapper, validar reglas de negocio, procesar DTOs y exponer endpoints
+       REST seguros (JSON).
+
+
+================================================================================
+2. ESTRUCTURA DE CARPETAS ORGANIZADA
+================================================================================
+
+autozen/
+│
+├── backend/                       <-- BACKEND COMPLETO (.NET 10 Web API)
+│   ├── Autozen.Api.csproj         <-- Proyecto .NET con Dapper, Npgsql y Scalar
+│   ├── appsettings.json           <-- Cadena de conexion a PostgreSQL
+│   ├── Program.cs                 <-- Configuracion de DI, CORS y documentacion
+│   ├── Controllers/               <-- 17 Controladores REST (/api/...)
+│   ├── Repositories/              <-- 17 Repositorios Dapper (CRUD SQL asincrono)
+│   ├── Models/                    <-- 17 Entidades C# mapeadas a PostgreSQL
+│   ├── DTOs/                      <-- 17 DTOs de peticion (Create...Dto)
+│   └── Data/
+│       └── DapperContext.cs       <-- Fabrica de conexiones y mapeo snake_case
+│
+├── lib/                           <-- FRONTEND COMPLETO (Flutter / Dart)
+│   ├── models/                    <-- 17 Modelos Dart para deserializar respuestas JSON
+│   ├── controllers/               <-- Controladores de estado de UI (ChangeNotifier)
+│   ├── services/                  <-- Clientes HTTP que llaman a la API de .NET
+│   │   └── api_client.dart        <-- Cliente HTTP base reutilizable (GET, POST, etc.)
+│   ├── views/                     <-- Pantallas de la app (Home, Camiones, Almacen)
+│   ├── widgets/                   <-- Componentes visuales reutilizables (Botones, Cards)
+│   ├── utils/                     <-- Configuracion global
+│   │   └── api_constants.dart     <-- URLs y rutas del backend de .NET
+│   └── main.dart                  <-- Punto de entrada de la aplicacion Flutter
+│
+├── android/                       <-- Configuracion nativa de Android
+├── windows/                       <-- Configuracion nativa de Windows
+├── pubspec.yaml                   <-- Dependencias de Flutter (http, icons, etc.)
+└── ARQUITECTURA.txt               <-- Este documento explicativo
+
+
+================================================================================
+3. LO QUE SE ELIMINO Y POR QUE
+================================================================================
+
+1. lib/dtos/ (ELIMINADO):
+   - Los DTOs de creacion y recepcion de base de datos pertenecen al backend.
+   - En .NET ya estan todos en ackend/DTOs/ (ej. CreateCamionDto.cs).
+   - Mantenerlos en Flutter duplicaba codigo y generaba confusion. En Flutter
+     solo se necesitan los lib/models/ para recibir y pintar el JSON.
+
+2. lib/pages/ (ELIMINADO):
+   - Era un duplicado innecesario de lib/views/. Todas las pantallas van en iews/.
+
+3. ESTRUCTURA_MVC.txt (ACTUALIZADO A ESTE ARCHIVO):
+   - El archivo anterior asumia que todo el sistema viviria dentro de Dart.
+================================================================================
