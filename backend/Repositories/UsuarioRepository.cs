@@ -11,6 +11,7 @@ public interface IUsuarioRepository
     Task<IEnumerable<Usuario>> GetAllAsync();
     Task<Usuario?> GetByIdAsync(int id);
     Task<Usuario> CreateAsync(CreateUsuarioDto dto);
+    Task<Usuario?> GetByUsername(string username);
     Task<bool> UpdateAsync(int id, CreateUsuarioDto dto);
     Task<bool> DeleteAsync(int id);
 }
@@ -26,21 +27,31 @@ public class UsuarioRepository : IUsuarioRepository
 
     public async Task<IEnumerable<Usuario>> GetAllAsync()
     {
-        const string query = "SELECT \"id_usuario\" AS \"IdUsuario\", \"nombre\" AS \"Nombre\", \"rol\" AS \"Rol\", \"puestoTrabajo\" AS \"PuestoTrabajo\", \"metodoContacto\" AS \"MetodoContacto\" FROM USUARIO;";
+        const string query = "SELECT \"id_usuario\" AS \"IdUsuario\", \"trabajador_id\" AS \"TrabajadorId\", \"nombre\" AS \"Nombre\", \"username\" AS \"Username\", \"rol\" AS \"Rol\", \"puestoTrabajo\" AS \"PuestoTrabajo\", \"metodoContacto\" AS \"MetodoContacto\" FROM USUARIO;";
         using var connection = _context.CreateConnection();
         return await connection.QueryAsync<Usuario>(query);
     }
 
     public async Task<Usuario?> GetByIdAsync(int id)
     {
-        const string query = "SELECT \"id_usuario\" AS \"IdUsuario\", \"nombre\" AS \"Nombre\", \"rol\" AS \"Rol\", \"puestoTrabajo\" AS \"PuestoTrabajo\", \"metodoContacto\" AS \"MetodoContacto\" FROM USUARIO WHERE \"id_usuario\" = @Id;";
+        const string query = "SELECT \"id_usuario\" AS \"IdUsuario\", \"trabajador_id\" AS \"TrabajadorId\", \"nombre\" AS \"Nombre\", \"username\" AS \"Username\", \"rol\" AS \"Rol\", \"puestoTrabajo\" AS \"PuestoTrabajo\", \"metodoContacto\" AS \"MetodoContacto\" FROM USUARIO WHERE \"id_usuario\" = @Id;";
         using var connection = _context.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<Usuario>(query, new { Id = id });
     }
 
+    public async Task<Usuario?> GetByUsername(string username)
+    {
+        const string query = "SELECT \"id_usuario\" AS \"IdUsuario\", \"username\" AS \"Username\", \"password\" AS \"Password\", \"rol\" AS \"Rol\" FROM USUARIO WHERE \"username\" = @Username;";
+
+        using var connection = _context.CreateConnection();
+        return await connection.QueryFirstOrDefaultAsync<Usuario>(query, new { Username = username });
+    }
+
     public async Task<Usuario> CreateAsync(CreateUsuarioDto dto)
     {
-        const string query = "INSERT INTO USUARIO (\"nombre\", \"rol\", \"puestoTrabajo\", \"metodoContacto\") VALUES (@Nombre, @Rol, @PuestoTrabajo, @MetodoContacto) RETURNING \"id_usuario\" AS \"IdUsuario\", \"nombre\" AS \"Nombre\", \"rol\" AS \"Rol\", \"puestoTrabajo\" AS \"PuestoTrabajo\", \"metodoContacto\" AS \"MetodoContacto\";";
+        const string query = "INSERT INTO USUARIO (\"trabajador_id\", \"nombre\", \"username\", \"rol\", \"password\", \"puestoTrabajo\", \"metodoContacto\") " +
+                             "VALUES (@TrabajadorId, @Nombre, @Username, @Rol, @Password, @PuestoTrabajo, @MetodoContacto) " +
+                             "RETURNING \"id_usuario\" AS \"IdUsuario\", \"trabajador_id\" AS \"TrabajadorId\", \"nombre\" AS \"Nombre\", \"username\" AS \"Username\", \"rol\" AS \"Rol\", \"puestoTrabajo\" AS \"PuestoTrabajo\", \"metodoContacto\" AS \"MetodoContacto\";";
 
         using var connection = _context.CreateConnection();
         return await connection.QuerySingleAsync<Usuario>(query, dto);
@@ -48,7 +59,7 @@ public class UsuarioRepository : IUsuarioRepository
 
     public async Task<bool> UpdateAsync(int id, CreateUsuarioDto dto)
     {
-        const string query = "UPDATE USUARIO SET \"nombre\" = @Nombre, \"rol\" = @Rol, \"puestoTrabajo\" = @PuestoTrabajo, \"metodoContacto\" = @MetodoContacto WHERE \"id_usuario\" = @Id;";
+        const string query = "UPDATE USUARIO SET \"trabajador_id\" = @TrabajadorId, \"nombre\" = @Nombre, \"username\" = @Username, \"rol\" = @Rol, \"password\" = @Password, \"puestoTrabajo\" = @PuestoTrabajo, \"metodoContacto\" = @MetodoContacto WHERE \"id_usuario\" = @Id;";
 
         using var connection = _context.CreateConnection();
         var parameters = new DynamicParameters(dto);
