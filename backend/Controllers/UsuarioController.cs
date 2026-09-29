@@ -23,6 +23,7 @@ public class UsuarioController : ControllerBase
     public async Task<IActionResult> GetAll() => Ok(await _usuarioService.GetAllAsync());
 
     [HttpGet("{id}")]
+    [Authorize(Roles ="Admin")]
     public async Task<ActionResult<Usuario>> GetById(int id)
     {
         var item = await _usuarioService.GetByIdAsync(id);

@@ -26,13 +26,13 @@ namespace Autozen.Api.Services
             if (usuario == null)
                 return null; // No existe
 
-            // VerificaMOS contraseña con BCrypt
+            // Verificamos contraseña con BCrypt
             bool passwordValid = BCrypt.Net.BCrypt.Verify(request.Password, usuario.Password);
 
             if (!passwordValid)
                 return null; // Contraseña incorrecta
 
-            // CreaMOS los Claims (datos que viven dentro del token)
+            // Creamos los Claims (datos que viven dentro del token)
             var claims = new[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub, usuario.IdUsuario.ToString()),
@@ -41,7 +41,7 @@ namespace Autozen.Api.Services
                 new Claim("nombre", usuario.Nombre ?? string.Empty),
             };
 
-            // FirmaMOS el token con la clave secreta del appsettings.json
+            // Firma os el token con la clave secreta del appsettings.json
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
                 _config["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key no configurada.")));
 
