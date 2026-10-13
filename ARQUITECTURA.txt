@@ -14,7 +14,7 @@ El sistema esta desacoplado profesionalmente en dos capas independientes:
      - NO tiene logica de servidor.
 
   B) BACKEND (.NET 10 / C# / Dapper):
-     - Corre en servidor: Carpeta ackend/.
+     - Corre en servidor: Carpeta Backend/.
      - Responsabilidad UNICA: Conectarse a PostgreSQL, ejecutar queries SQL rapidos
        mediante Dapper, validar reglas de negocio, procesar DTOs y exponer endpoints
        REST seguros (JSON).

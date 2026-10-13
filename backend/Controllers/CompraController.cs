@@ -1,65 +1,156 @@
+using System.Security.Claims;
 using Autozen.Api.DTOs;
-using Autozen.Api.Models;
-using Autozen.Api.Repositories;
+using Autozen.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Autozen.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize] // Autenticación obligatoria
 public class CompraController : ControllerBase
 {
-    private readonly ICompraRepository _compraRepository;
+    private readonly CompraService _compraService;
+    private readonly CompraPdfService _pdfService;
 
-    public CompraController(ICompraRepository repository)
+    public CompraController(CompraService compraService, CompraPdfService pdfService)
     {
-        _compraRepository = repository;
+        _compraService = compraService;
+        _pdfService = pdfService;
     }
 
+    /// <summary>
+    /// Lista todas las órdenes de compra con cálculo de tiempos estimados de entrega y proveedor.
+    /// Exclusivo para el Administrador de Compras y Administración general.
+    /// </summary>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Compra>>> GetAll()
+    [Authorize(Roles = "Admin,Compras_Admin")]
+    public async Task<IActionResult> GetAll()
     {
-        var items = await _compraRepository.GetAllAsync();
-        return Ok(items);
+        var compras = await _compraService.GetAllOrdenesCompraAsync();
+        return Ok(compras);
     }
 
+    /// <summary>
+    /// Lista las órdenes de compra asociadas a un proyecto en específico.
+    /// Accesible por el taller y compras para monitoreo de avances.
+    /// </summary>
+    [HttpGet("proyecto/{idProyecto}")]
+    public async Task<IActionResult> GetByProyecto(int idProyecto)
+    {
+        var compras = await _compraService.GetOrdenesPorProyectoAsync(idProyecto);
+        return Ok(compras);
+    }
+
+    /// <summary>
+    /// Obtiene el detalle técnico completo de una orden de compra por ID.
+    /// </summary>
     [HttpGet("{id}")]
-    public async Task<ActionResult<Compra>> GetById(int id)
+    public async Task<IActionResult> GetById(int id)
     {
-        var item = await _compraRepository.GetByIdAsync(id);
-        if (item is null)
-        {
-            return NotFound(new { message = "Compra no encontrado." });
-        }
-        return Ok(item);
+        var compra = await _compraService.GetOrdenCompraByIdAsync(id);
+        return compra == null
+            ? NotFound(new { message = $"La orden de compra #{id} no existe." })
+            : Ok(compra);
     }
 
-    [HttpPost]
-    public async Task<ActionResult<Compra>> Create([FromBody] CreateCompraDto dto)
+    /// <summary>
+    /// Levanta una solicitud de compra asignada a un proyecto (Operación).
+    /// Permitido para Compras, Líderes de Proyecto y Administradores.
+    /// </summary>
+    [HttpPost("solicitud")]
+    [Authorize(Roles = "Admin,Compras_Admin,Proyecto_Lider")]
+    public async Task<IActionResult> CrearSolicitud([FromBody] CrearSolicitudCompraRequestDto dto)
     {
-        var created = await _compraRepository.CreateAsync(dto);
-        return CreatedAtAction(nameof(GetById), new { id = created.IdCompra }, created);
+        try
+        {
+            int? usuarioId = null;
+            var subClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(subClaim, out int uid))
+            {
+                usuarioId = uid;
+            }
+
+            var solicitud = await _compraService.CrearSolicitudCompraAsync(dto, usuarioId);
+            return Ok(new
+            {
+                message = "Solicitud de compra levantada con éxito.",
+                solicitud
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
-    [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, [FromBody] CreateCompraDto dto)
+    /// <summary>
+    /// Registra formalmente una orden de compra en el sistema.
+    /// Exclusivo para personal de Compras y Administración.
+    /// </summary>
+    [HttpPost("orden")]
+    [Authorize(Roles = "Admin,Compras_Admin")]
+    public async Task<IActionResult> CrearOrden([FromBody] CrearOrdenCompraRequestDto dto)
     {
-        var updated = await _compraRepository.UpdateAsync(id, dto);
-        if (!updated)
+        try
         {
-            return NotFound(new { message = "Compra no encontrado para actualizar." });
+            var orden = await _compraService.CrearOrdenCompraAsync(dto);
+            return CreatedAtAction(nameof(GetById), new { id = orden.IdCompra }, orden);
         }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Edita las piezas, cantidades o costos de una orden de compra.
+    /// </summary>
+    [HttpPut("orden/{id}")]
+    [Authorize(Roles = "Admin,Compras_Admin")]
+    public async Task<IActionResult> EditarOrden(int id, [FromBody] EditarOrdenCompraRequestDto dto)
+    {
+        var actualizado = await _compraService.EditarOrdenCompraAsync(id, dto);
+        if (!actualizado)
+        {
+            return NotFound(new { message = $"Orden de compra #{id} no encontrada para editar." });
+        }
+
         return NoContent();
     }
 
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id)
+    /// <summary>
+    /// Elimina una orden de compra del sistema.
+    /// </summary>
+    [HttpDelete("orden/{id}")]
+    [Authorize(Roles = "Admin,Compras_Admin")]
+    public async Task<IActionResult> EliminarOrden(int id)
     {
-        var deleted = await _compraRepository.DeleteAsync(id);
-        if (!deleted)
+        var eliminado = await _compraService.EliminarOrdenCompraAsync(id);
+        if (!eliminado)
         {
-            return NotFound(new { message = "Compra no encontrado para eliminar." });
+            return NotFound(new { message = $"Orden de compra #{id} no encontrada para eliminar." });
         }
+
         return NoContent();
+    }
+
+    /// <summary>
+    /// Genera y descarga el documento PDF oficial de la orden de compra con todos los datos del proyecto y proveedor.
+    /// </summary>
+    [HttpGet("orden/{id}/pdf")]
+    public async Task<IActionResult> DescargarPdf(int id)
+    {
+        var orden = await _compraService.GetOrdenCompraByIdAsync(id);
+        if (orden == null)
+        {
+            return NotFound(new { message = $"La orden de compra #{id} no existe." });
+        }
+
+        byte[] pdfBytes = _pdfService.GenerarOrdenCompraPdf(orden);
+        string nombreArchivo = $"OrdenCompra_{orden.IdCompra:D5}_{orden.PlacasCamion}.pdf";
+
+        return File(pdfBytes, "application/pdf", nombreArchivo);
     }
 }

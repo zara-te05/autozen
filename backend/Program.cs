@@ -39,6 +39,14 @@ builder.Services.AddScoped<IValeSalidaRepository, ValeSalidaRepository>();
 // Services
 builder.Services.AddScoped<LoginService>();
 builder.Services.AddScoped<UsuarioService>();
+builder.Services.AddScoped<RegisterUserService>();
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<UsuarioAdminService>();
+builder.Services.AddScoped<ProyectoService>();
+builder.Services.AddScoped<CompraService>();
+builder.Services.AddScoped<CompraPdfService>();
+builder.Services.AddScoped<AlmacenInventarioService>();
+builder.Services.AddScoped<HerramientasService>();
 
 // JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"]

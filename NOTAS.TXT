@@ -1,2 +1,0 @@
-18/09/2026 - Zarate
-    Hoy instale Dart Frog como framework para levantar el backend.
