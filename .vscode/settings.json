@@ -1,4 +1,3 @@
 {
-    "cmake.sourceDirectory": "C:/Users/zarat/OneDrive/Desktop/autozen/windows",
-    "dotnet.defaultSolution": "backend/Autozen.Api.csproj"
+    "cmake.sourceDirectory": "C:/Users/zarat/OneDrive/Desktop/autozen/windows"
 }
