@@ -6,122 +6,97 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Autozen.Api.Controllers;
 
+/// <summary>Proyectos del taller (clientes y aseguradoras), sus etapas y fotos.</summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // Todos los endpoints requieren autenticación
+[Authorize]
 public class ProyectoController : ControllerBase
 {
-    private readonly ProyectoService _proyectoService;
+    private readonly ProyectosTallerService _servicio;
 
-    public ProyectoController(ProyectoService proyectoService)
-    {
-        _proyectoService = proyectoService;
-    }
+    public ProyectoController(ProyectosTallerService servicio) => _servicio = servicio;
 
-    /// <summary>
-    /// Lista todos los proyectos con su camión, cliente y estado de avance.
-    /// Accesible por cualquier usuario autenticado (lectura general).
-    /// </summary>
+    /// <param name="tipo">Cliente o Aseguradora (opcional).</param>
+    /// <param name="archivados">true: solo archivados; false: solo activos; sin valor: todos.</param>
     [HttpGet]
-    public async Task<IActionResult> GetAll()
-    {
-        var proyectos = await _proyectoService.GetAllAsync();
-        return Ok(proyectos);
-    }
+    public async Task<ActionResult<List<ProyectoTallerDto>>> Listar([FromQuery] string? tipo, [FromQuery] bool? archivados) =>
+        Ok(await _servicio.ListarAsync(tipo, archivados));
 
-    /// <summary>
-    /// Obtiene la ficha técnica completa de un proyecto por ID.
-    /// </summary>
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetById(int id)
-    {
-        var proyecto = await _proyectoService.GetByIdAsync(id);
-        return proyecto == null 
-            ? NotFound(new { message = $"El proyecto con ID {id} no existe." }) 
-            : Ok(proyecto);
-    }
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<ProyectoTallerDto>> Obtener(int id) => Ok(await _servicio.ObtenerAsync(id));
 
-    /// <summary>
-    /// Crea un nuevo proyecto (Camión + Cliente + Operación).
-    /// Solo permitido para Administradores o Líderes de Proyecto.
-    /// </summary>
+    /// <summary>Crea el proyecto con los datos de la Evaluación de Daños.</summary>
     [HttpPost]
-    [Authorize(Roles = "Admin,Proyecto_Lider")]
-    public async Task<IActionResult> Create([FromBody] CrearProyectoRequestDto dto)
+    [Authorize(Roles = Edicion.CrearProyecto)]
+    public async Task<ActionResult<ProyectoTallerDto>> Crear([FromBody] GuardarProyectoRequest request)
     {
-        try
-        {
-            var creado = await _proyectoService.CrearProyectoAsync(dto);
-            return CreatedAtAction(nameof(GetById), new { id = creado.IdProyecto }, creado);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var creado = await _servicio.CrearAsync(request, UsuarioId());
+        return CreatedAtAction(nameof(Obtener), new { id = creado.Id }, creado);
     }
 
-    /// <summary>
-    /// Edita información del camión o avance del proyecto.
-    /// Solo permitido para Administradores o Líderes de Proyecto.
-    /// </summary>
-    [HttpPut("{id}")]
-    [Authorize(Roles = "Admin,Proyecto_Lider")]
-    public async Task<IActionResult> Update(int id, [FromBody] EditarProyectoRequestDto dto)
+    [HttpPut("{id:int}")]
+    [Authorize(Roles = Edicion.Proyectos)]
+    public async Task<ActionResult<ProyectoTallerDto>> Actualizar(int id, [FromBody] GuardarProyectoRequest request) =>
+        Ok(await _servicio.ActualizarAsync(id, request));
+
+    [HttpPost("{id:int}/avanzar")]
+    [Authorize(Roles = Edicion.Proyectos)]
+    public async Task<ActionResult<ProyectoTallerDto>> Avanzar(int id) => Ok(await _servicio.AvanzarEtapaAsync(id));
+
+    [HttpPost("{id:int}/archivar")]
+    [Authorize(Roles = Edicion.Proyectos)]
+    public async Task<ActionResult<ProyectoTallerDto>> Archivar(int id) => Ok(await _servicio.CambiarArchivadoAsync(id, true));
+
+    [HttpPost("{id:int}/restaurar")]
+    [Authorize(Roles = Edicion.Proyectos)]
+    public async Task<ActionResult<ProyectoTallerDto>> Restaurar(int id) => Ok(await _servicio.CambiarArchivadoAsync(id, false));
+
+    [HttpGet("{id:int}/fotos/{idFoto:int}")]
+    public async Task<IActionResult> Foto(int id, int idFoto)
     {
-        try
-        {
-            var actualizado = await _proyectoService.EditarProyectoAsync(id, dto);
-            if (!actualizado)
-            {
-                return NotFound(new { message = "Proyecto no encontrado para actualizar." });
-            }
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var (ruta, tipoContenido) = await _servicio.ObtenerFotoAsync(id, idFoto);
+        return PhysicalFile(ruta, tipoContenido);
     }
 
-    /// <summary>
-    /// Registra la solicitud de baja/eliminación de un proyecto justificando el motivo.
-    /// Cualquier usuario del taller puede solicitar la baja si no tiene privilegios directos de borrado.
-    /// </summary>
-    [HttpPost("{id}/solicitar-baja")]
-    public async Task<IActionResult> SolicitarBaja(int id, [FromBody] SolicitarBajaProyectoRequestDto dto)
+    /// <summary>Sube una foto (campo de formulario "archivo"). Máximo 10 MB.</summary>
+    [HttpPost("{id:int}/fotos")]
+    [Authorize(Roles = Edicion.CrearProyecto)]
+    [RequestSizeLimit(11 * 1024 * 1024)]
+    public async Task<ActionResult<FotoProyectoDto>> SubirFoto(int id, IFormFile archivo) => Ok(await _servicio.AgregarFotoAsync(id, archivo));
+
+    [HttpDelete("{id:int}/fotos/{idFoto:int}")]
+    [Authorize(Roles = Edicion.CrearProyecto)]
+    public async Task<IActionResult> EliminarFoto(int id, int idFoto)
     {
-        if (string.IsNullOrWhiteSpace(dto.Motivo))
-        {
-            return BadRequest(new { message = "Debe proporcionar el motivo de la solicitud de baja." });
-        }
-
-        string username = User.FindFirst(ClaimTypes.Name)?.Value 
-            ?? User.Identity?.Name 
-            ?? "Usuario";
-
-        var solicitado = await _proyectoService.SolicitarBajaAsync(id, dto, username);
-        if (!solicitado)
-        {
-            return NotFound(new { message = "Proyecto no encontrado para solicitar su baja." });
-        }
-
-        return Ok(new { message = "Solicitud de baja registrada exitosamente para revisión administrativa." });
-    }
-
-    /// <summary>
-    /// Elimina o da de baja definitiva a un proyecto.
-    /// Requiere privilegios en su área (Admin o Proyecto_Lider).
-    /// </summary>
-    [HttpDelete("{id}")]
-    [Authorize(Roles = "Admin,Proyecto_Lider")]
-    public async Task<IActionResult> Delete(int id)
-    {
-        var eliminado = await _proyectoService.EliminarProyectoAsync(id);
-        if (!eliminado)
-        {
-            return NotFound(new { message = "Proyecto no encontrado para eliminar." });
-        }
-
+        await _servicio.EliminarFotoAsync(id, idFoto);
         return NoContent();
+    }
+
+    [HttpGet("{id:int}/documentos/{idDocumento:int}")]
+    public async Task<IActionResult> Documento(int id, int idDocumento)
+    {
+        var (ruta, nombre) = await _servicio.ObtenerDocumentoAsync(id, idDocumento);
+        return PhysicalFile(ruta, "application/pdf", nombre);
+    }
+
+    /// <summary>Sube un PDF de la aseguradora (campo de formulario "archivo"). Máximo 20 MB.</summary>
+    [HttpPost("{id:int}/documentos")]
+    [Authorize(Roles = Edicion.CrearProyecto)]
+    [RequestSizeLimit(21 * 1024 * 1024)]
+    public async Task<ActionResult<DocumentoProyectoDto>> SubirDocumento(int id, IFormFile archivo) =>
+        Ok(await _servicio.AgregarDocumentoAsync(id, archivo));
+
+    [HttpDelete("{id:int}/documentos/{idDocumento:int}")]
+    [Authorize(Roles = Edicion.CrearProyecto)]
+    public async Task<IActionResult> EliminarDocumento(int id, int idDocumento)
+    {
+        await _servicio.EliminarDocumentoAsync(id, idDocumento);
+        return NoContent();
+    }
+
+    private int? UsuarioId()
+    {
+        var valor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        return int.TryParse(valor, out var id) ? id : null;
     }
 }

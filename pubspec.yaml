@@ -35,6 +35,17 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   http: ^1.6.0
+  http_parser: ^4.0.2
+  # Notificaciones locales: stock bajo, entregas próximas y recordatorios
+  flutter_local_notifications: ^20.1.0
+  timezone: ^0.10.0
+  shared_preferences: ^2.3.2
+  # Fotos de la Evaluación de Daños: cámara en Android, selector de archivos en Windows
+  image_picker: ^1.1.2
+  path_provider: ^2.1.5
+  # PDFs de la aseguradora: elegir el archivo y abrirlo con el visor del sistema
+  file_selector: ^1.0.3
+  open_filex: ^4.5.0
 
 dev_dependencies:
   flutter_test:

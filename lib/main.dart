@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'models/proyecto_taller.dart';
+import 'services/notificaciones_service.dart';
 import 'utils/app_theme.dart';
 import 'views/login_screen.dart';
 import 'views/dashboard_screen.dart';
@@ -8,10 +10,13 @@ import 'views/proyectos_screen.dart';
 import 'views/compras_screen.dart';
 import 'views/almacen_screen.dart';
 import 'views/evaluacion_screen.dart';
+import 'views/proveedores_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const AutozenApp());
+  // Notificaciones del teléfono (stock bajo, entregas próximas, recordatorios). En Windows no hace nada.
+  await NotificacionesService.instancia.iniciar();
 }
 
 class AutozenApp extends StatelessWidget {
@@ -34,10 +39,12 @@ class AutozenApp extends StatelessWidget {
         },
         '/usuarios': (context) => const UsuariosScreen(),
         '/departamentos': (context) => const DepartamentosScreen(),
-        '/proyectos': (context) => const ProyectosScreen(),
+        '/proyectos': (context) => const ProyectosScreen(tipo: TipoProyecto.cliente),
+        '/proyectos-aseguradora': (context) => const ProyectosScreen(tipo: TipoProyecto.aseguradora),
         '/compras': (context) => const ComprasScreen(),
         '/almacen': (context) => const AlmacenScreen(),
         '/evaluacion': (context) => const EvaluacionScreen(),
+        '/proveedores': (context) => const ProveedoresScreen(),
       },
     );
   }

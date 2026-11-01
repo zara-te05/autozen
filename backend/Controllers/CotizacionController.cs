@@ -1,12 +1,14 @@
 using Autozen.Api.DTOs;
 using Autozen.Api.Models;
 using Autozen.Api.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Autozen.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize] // Leer: cualquier usuario autenticado. Escribir: Admin y jefe de Proyectos
 public class CotizacionController : ControllerBase
 {
     private readonly ICotizacionRepository _cotizacionRepository;
@@ -29,12 +31,13 @@ public class CotizacionController : ControllerBase
         var item = await _cotizacionRepository.GetByIdAsync(id);
         if (item is null)
         {
-            return NotFound(new { message = "Cotizacion no encontrado." });
+            return Problem(detail: "Cotizacion no encontrado.", statusCode: StatusCodes.Status404NotFound);
         }
         return Ok(item);
     }
 
     [HttpPost]
+    [Authorize(Roles = Edicion.Proyectos)]
     public async Task<ActionResult<Cotizacion>> Create([FromBody] CreateCotizacionDto dto)
     {
         var created = await _cotizacionRepository.CreateAsync(dto);
@@ -42,23 +45,25 @@ public class CotizacionController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = Edicion.Proyectos)]
     public async Task<IActionResult> Update(int id, [FromBody] CreateCotizacionDto dto)
     {
         var updated = await _cotizacionRepository.UpdateAsync(id, dto);
         if (!updated)
         {
-            return NotFound(new { message = "Cotizacion no encontrado para actualizar." });
+            return Problem(detail: "Cotizacion no encontrado para actualizar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = Edicion.Proyectos)]
     public async Task<IActionResult> Delete(int id)
     {
         var deleted = await _cotizacionRepository.DeleteAsync(id);
         if (!deleted)
         {
-            return NotFound(new { message = "Cotizacion no encontrado para eliminar." });
+            return Problem(detail: "Cotizacion no encontrado para eliminar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }

@@ -92,6 +92,40 @@ public class CompraService
     /// Lista todas las órdenes de compra con datos de proveedor, vehículo y cálculo de tiempos estimados de entrega.
     /// Exclusivo para el Administrador de Compras y Administración.
     /// </summary>
+    /// <summary>
+    /// Crea la solicitud y la orden de compra en un solo paso (lo que usa la app).
+    /// </summary>
+    public async Task<OrdenCompraDetalleResponseDto> CrearOrdenDirectaAsync(CrearOrdenDirectaRequest dto, int? usuarioId)
+    {
+        var operacion = await _operacionRepo.GetByIdAsync(dto.OperacionId)
+            ?? throw new Autozen.Api.Errors.NoEncontradoException($"El proyecto #{dto.OperacionId} no existe.");
+
+        int idCompra = await _context.EnTransaccionAsync(async () =>
+        {
+            var solicitud = await _solicitudRepo.CreateAsync(new CreateSolicitudCompraDto
+            {
+                OperacionId = operacion.IdOperacion,
+                UsuarioId = usuarioId,
+                ProveedorId = dto.ProveedorId,
+                NombrePiezasCotizadas = dto.NombrePiezas.Trim(),
+                CantidadPiezasCotizadas = dto.CantidadPiezas,
+                FechaSolicitud = DateTime.Now
+            });
+            var compra = await _compraRepo.CreateAsync(new CreateCompraDto
+            {
+                SolicitudCompraId = solicitud.IdSolicitudCompra,
+                OperacionId = operacion.IdOperacion,
+                NombrePiezas = dto.NombrePiezas.Trim(),
+                CantidadPiezas = dto.CantidadPiezas,
+                CostoPiezas = dto.CostoPiezas
+            });
+            return compra.IdCompra;
+        });
+
+        return await GetOrdenCompraByIdAsync(idCompra)
+            ?? throw new InvalidOperationException("Error al recuperar la orden de compra creada.");
+    }
+
     public async Task<IEnumerable<OrdenCompraDetalleResponseDto>> GetAllOrdenesCompraAsync()
     {
         const string query = @"
@@ -103,8 +137,8 @@ public class CompraService
                 c.""cantidadPiezas"" AS ""CantidadPiezas"",
                 c.""costoPiezas"" AS ""CostoPiezas"",
                 cam.""placas"" AS ""PlacasCamion"",
-                TRIM(COALESCE(cam.""marca"", '') || ' ' || COALESCE(cam.""modelo"", '')) AS ""MarcaModeloCamion"",
-                TRIM(COALESCE(cli.""nombre"", '') || ' ' || COALESCE(cli.""apellido"", '')) AS ""NombreCliente"",
+                COALESCE(NULLIF(cam.nombre, ''), TRIM(COALESCE(cam.""marca"", '') || ' ' || COALESCE(cam.""modelo"", ''))) AS ""MarcaModeloCamion"",
+                COALESCE(o.aseguradora, TRIM(COALESCE(cli.""nombre"", '') || ' ' || COALESCE(cli.""apellido"", ''))) AS ""NombreCliente"",
                 p.""id_proveedor"" AS ""ProveedorId"",
                 p.""nombreProveedor"" AS ""NombreProveedor"",
                 p.""contacto"" AS ""ContactoProveedor"",
@@ -115,13 +149,12 @@ public class CompraService
             INNER JOIN SOLICITUD_COMPRA sc ON c.""solicitud_compra_id"" = sc.""id_solicitud_compra""
             INNER JOIN OPERACIONES o ON c.""operacion_id"" = o.""id_operacion""
             INNER JOIN CAMION cam ON o.""camion_id"" = cam.""id_camion""
-            INNER JOIN CLIENTE cli ON cam.""cliente_id"" = cli.""id_cliente""
+            LEFT JOIN CLIENTE cli ON cam.""cliente_id"" = cli.""id_cliente""
             LEFT JOIN PROVEEDOR p ON sc.""proveedor_id"" = p.""id_proveedor""
             LEFT JOIN USUARIO u ON sc.""usuario_id"" = u.""id_usuario""
             ORDER BY c.""id_compra"" DESC;";
 
-        using var connection = _context.CreateConnection();
-        var lista = await connection.QueryAsync<dynamic>(query);
+        var lista = await _context.RunAsync((connection, tx) => connection.QueryAsync<dynamic>(query, transaction: tx));
 
         return lista.Select(MapearADetalle);
     }
@@ -140,8 +173,8 @@ public class CompraService
                 c.""cantidadPiezas"" AS ""CantidadPiezas"",
                 c.""costoPiezas"" AS ""CostoPiezas"",
                 cam.""placas"" AS ""PlacasCamion"",
-                TRIM(COALESCE(cam.""marca"", '') || ' ' || COALESCE(cam.""modelo"", '')) AS ""MarcaModeloCamion"",
-                TRIM(COALESCE(cli.""nombre"", '') || ' ' || COALESCE(cli.""apellido"", '')) AS ""NombreCliente"",
+                COALESCE(NULLIF(cam.nombre, ''), TRIM(COALESCE(cam.""marca"", '') || ' ' || COALESCE(cam.""modelo"", ''))) AS ""MarcaModeloCamion"",
+                COALESCE(o.aseguradora, TRIM(COALESCE(cli.""nombre"", '') || ' ' || COALESCE(cli.""apellido"", ''))) AS ""NombreCliente"",
                 p.""id_proveedor"" AS ""ProveedorId"",
                 p.""nombreProveedor"" AS ""NombreProveedor"",
                 p.""contacto"" AS ""ContactoProveedor"",
@@ -152,14 +185,13 @@ public class CompraService
             INNER JOIN SOLICITUD_COMPRA sc ON c.""solicitud_compra_id"" = sc.""id_solicitud_compra""
             INNER JOIN OPERACIONES o ON c.""operacion_id"" = o.""id_operacion""
             INNER JOIN CAMION cam ON o.""camion_id"" = cam.""id_camion""
-            INNER JOIN CLIENTE cli ON cam.""cliente_id"" = cli.""id_cliente""
+            LEFT JOIN CLIENTE cli ON cam.""cliente_id"" = cli.""id_cliente""
             LEFT JOIN PROVEEDOR p ON sc.""proveedor_id"" = p.""id_proveedor""
             LEFT JOIN USUARIO u ON sc.""usuario_id"" = u.""id_usuario""
             WHERE c.""operacion_id"" = @IdProyecto
             ORDER BY c.""id_compra"" DESC;";
 
-        using var connection = _context.CreateConnection();
-        var lista = await connection.QueryAsync<dynamic>(query, new { IdProyecto = idProyecto });
+        var lista = await _context.RunAsync((connection, tx) => connection.QueryAsync<dynamic>(query, new { IdProyecto = idProyecto }, transaction: tx));
 
         return lista.Select(MapearADetalle);
     }
@@ -178,8 +210,8 @@ public class CompraService
                 c.""cantidadPiezas"" AS ""CantidadPiezas"",
                 c.""costoPiezas"" AS ""CostoPiezas"",
                 cam.""placas"" AS ""PlacasCamion"",
-                TRIM(COALESCE(cam.""marca"", '') || ' ' || COALESCE(cam.""modelo"", '')) AS ""MarcaModeloCamion"",
-                TRIM(COALESCE(cli.""nombre"", '') || ' ' || COALESCE(cli.""apellido"", '')) AS ""NombreCliente"",
+                COALESCE(NULLIF(cam.nombre, ''), TRIM(COALESCE(cam.""marca"", '') || ' ' || COALESCE(cam.""modelo"", ''))) AS ""MarcaModeloCamion"",
+                COALESCE(o.aseguradora, TRIM(COALESCE(cli.""nombre"", '') || ' ' || COALESCE(cli.""apellido"", ''))) AS ""NombreCliente"",
                 p.""id_proveedor"" AS ""ProveedorId"",
                 p.""nombreProveedor"" AS ""NombreProveedor"",
                 p.""contacto"" AS ""ContactoProveedor"",
@@ -190,13 +222,12 @@ public class CompraService
             INNER JOIN SOLICITUD_COMPRA sc ON c.""solicitud_compra_id"" = sc.""id_solicitud_compra""
             INNER JOIN OPERACIONES o ON c.""operacion_id"" = o.""id_operacion""
             INNER JOIN CAMION cam ON o.""camion_id"" = cam.""id_camion""
-            INNER JOIN CLIENTE cli ON cam.""cliente_id"" = cli.""id_cliente""
+            LEFT JOIN CLIENTE cli ON cam.""cliente_id"" = cli.""id_cliente""
             LEFT JOIN PROVEEDOR p ON sc.""proveedor_id"" = p.""id_proveedor""
             LEFT JOIN USUARIO u ON sc.""usuario_id"" = u.""id_usuario""
             WHERE c.""id_compra"" = @Id;";
 
-        using var connection = _context.CreateConnection();
-        var item = await connection.QueryFirstOrDefaultAsync<dynamic>(query, new { Id = idCompra });
+        var item = await _context.RunAsync((connection, tx) => connection.QueryFirstOrDefaultAsync<dynamic>(query, new { Id = idCompra }, transaction: tx));
 
         return item == null ? null : MapearADetalle(item);
     }

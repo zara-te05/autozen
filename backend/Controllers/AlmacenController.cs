@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Autozen.Api.DTOs;
 using Autozen.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -5,97 +6,106 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Autozen.Api.Controllers;
 
+/// <summary>Catálogo del almacén, categorías y vales de salida de material.</summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // Autenticación obligatoria
+[Authorize]
 public class AlmacenController : ControllerBase
 {
-    private readonly AlmacenInventarioService _almacenService;
+    private readonly AlmacenService _servicio;
 
-    public AlmacenController(AlmacenInventarioService almacenService)
+    public AlmacenController(AlmacenService servicio) => _servicio = servicio;
+
+    // ---------- Artículos ----------
+
+    [HttpGet("articulos")]
+    public async Task<ActionResult<List<ArticuloDto>>> Articulos() => Ok(await _servicio.ListarArticulosAsync());
+
+    [HttpPost("articulos")]
+    [Authorize(Roles = Edicion.Almacen)]
+    public async Task<ActionResult<ArticuloDto>> CrearArticulo([FromBody] GuardarArticuloRequest request) =>
+        Ok(await _servicio.GuardarArticuloAsync(null, request));
+
+    [HttpPut("articulos/{id:int}")]
+    [Authorize(Roles = Edicion.Almacen)]
+    public async Task<ActionResult<ArticuloDto>> EditarArticulo(int id, [FromBody] GuardarArticuloRequest request) =>
+        Ok(await _servicio.GuardarArticuloAsync(id, request));
+
+    [HttpDelete("articulos/{id:int}")]
+    [Authorize(Roles = Edicion.Almacen)]
+    public async Task<IActionResult> EliminarArticulo(int id)
     {
-        _almacenService = almacenService;
+        await _servicio.EliminarArticuloAsync(id);
+        return NoContent();
     }
 
-    /// <summary>
-    /// Consulta el catálogo completo de piezas y materiales con su stock disponible y costos.
-    /// </summary>
-    [HttpGet("stock")]
-    [HttpGet]
-    public async Task<IActionResult> GetAllStock()
+    // ---------- Categorías ----------
+
+    [HttpGet("categorias")]
+    public async Task<ActionResult<List<CategoriaAlmacenDto>>> Categorias() => Ok(await _servicio.ListarCategoriasAsync());
+
+    [HttpPost("categorias")]
+    [Authorize(Roles = Edicion.Almacen)]
+    public async Task<ActionResult<CategoriaAlmacenDto>> CrearCategoria([FromBody] GuardarCategoriaRequest request) =>
+        Ok(await _servicio.GuardarCategoriaAsync(null, request));
+
+    [HttpPut("categorias/{id:int}")]
+    [Authorize(Roles = Edicion.Almacen)]
+    public async Task<ActionResult<CategoriaAlmacenDto>> RenombrarCategoria(int id, [FromBody] GuardarCategoriaRequest request) =>
+        Ok(await _servicio.GuardarCategoriaAsync(id, request));
+
+    [HttpDelete("categorias/{id:int}")]
+    [Authorize(Roles = Edicion.Almacen)]
+    public async Task<IActionResult> EliminarCategoria(int id)
     {
-        var stock = await _almacenService.GetAllStockAsync();
-        return Ok(stock);
+        await _servicio.EliminarCategoriaAsync(id);
+        return NoContent();
     }
 
-    /// <summary>
-    /// Obtiene los detalles de una pieza específica del almacén.
-    /// </summary>
-    [HttpGet("stock/{id}")]
-    public async Task<IActionResult> GetStockById(int id)
+    // ---------- Vales de material ----------
+
+    [HttpGet("vales-material")]
+    public async Task<ActionResult<List<ValeMaterialDto>>> ValesMaterial([FromQuery] int? proyectoId) =>
+        Ok(await _servicio.ListarValesMaterialAsync(proyectoId));
+
+    [HttpPost("vales-material")]
+    [Authorize(Roles = Edicion.ValesAlmacen)]
+    public async Task<ActionResult<ValeMaterialDto>> CrearValeMaterial([FromBody] CrearValeMaterialRequest request) =>
+        Ok(await _servicio.CrearValeMaterialAsync(request));
+
+    // ---------- Entrega de placas / resguardos ----------
+
+    [HttpGet("resguardos")]
+    public async Task<ActionResult<List<ResguardoDto>>> Resguardos() => Ok(await _servicio.ListarResguardosAsync());
+
+    [HttpPost("resguardos")]
+    [Authorize(Roles = Edicion.Almacen)]
+    [RequestSizeLimit(1024 * 1024)]
+    public async Task<ActionResult<ResguardoDto>> RegistrarResguardo([FromBody] ResguardoDto request)
     {
-        var item = await _almacenService.GetStockByIdAsync(id);
-        return item == null 
-            ? NotFound(new { message = $"Pieza #{id} no encontrada en almacén." }) 
-            : Ok(item);
+        var valor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        return Ok(await _servicio.RegistrarResguardoAsync(request, int.TryParse(valor, out var id) ? id : null));
     }
 
-    /// <summary>
-    /// Da de alta una nueva pieza o material en el catálogo de almacén.
-    /// Exclusivo para personal de Almacén y Administración.
-    /// </summary>
-    [HttpPost("stock")]
-    [Authorize(Roles = "Admin,Almacen_Admin")]
-    public async Task<IActionResult> CrearPieza([FromBody] CrearPiezaAlmacenRequestDto dto)
+    [HttpPost("resguardos/{id:int}/salida")]
+    [Authorize(Roles = Edicion.Almacen)]
+    public async Task<ActionResult<ResguardoDto>> SalidaResguardo(int id, [FromBody] SalidaResguardoRequest request) =>
+        Ok(await _servicio.RegistrarSalidaResguardoAsync(id, request));
+
+    [HttpDelete("resguardos/{id:int}")]
+    [Authorize(Roles = Edicion.Almacen)]
+    public async Task<IActionResult> EliminarResguardo(int id)
     {
-        try
-        {
-            var creada = await _almacenService.CrearPiezaAsync(dto);
-            return CreatedAtAction(nameof(GetStockById), new { id = creada.IdAlmacen }, creada);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        await _servicio.EliminarResguardoAsync(id);
+        return NoContent();
     }
 
-    /// <summary>
-    /// Registra la salida de material hacia un proyecto, descuenta inventario y calcula el importe a cobrar al cliente.
-    /// Permitido para Almacén, Administración y Líderes de Proyecto.
-    /// </summary>
-    [HttpPost("salida")]
-    [Authorize(Roles = "Admin,Almacen_Admin,Proyecto_Lider")]
-    public async Task<IActionResult> RegistrarSalida([FromBody] RegistrarSalidaMaterialRequestDto dto)
+    /// <summary>Cancela el vale: el material regresa al almacén.</summary>
+    [HttpDelete("vales-material/{id:int}")]
+    [Authorize(Roles = Edicion.ValesAlmacen)]
+    public async Task<IActionResult> CancelarValeMaterial(int id)
     {
-        try
-        {
-            var resultado = await _almacenService.RegistrarSalidaMaterialAsync(dto);
-            return Ok(new
-            {
-                message = "Salida de material registrada exitosamente.",
-                consumo = resultado
-            });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Consulta la contabilidad de todos los materiales consumidos por un proyecto y el monto total a cobrar.
-    /// </summary>
-    [HttpGet("proyecto/{idProyecto}/consumo")]
-    public async Task<IActionResult> GetConsumoPorProyecto(int idProyecto)
-    {
-        var consumos = await _almacenService.GetConsumoMaterialPorProyectoAsync(idProyecto);
-        decimal granTotal = consumos.Sum(c => c.TotalACobrar);
-
-        return Ok(new
-        {
-            idProyecto = idProyecto,
-            totalCobroMateriales = granTotal,
-            detalles = consumos
-        });
+        await _servicio.CancelarValeMaterialAsync(id);
+        return NoContent();
     }
 }

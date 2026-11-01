@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import '../models/catalogos.dart';
+import '../services/catalogos_store.dart';
 import '../utils/app_theme.dart';
 import '../widgets/confirm_dialog.dart';
-import '../widgets/status_badge.dart';
+import '../widgets/contenido_responsivo.dart';
+import '../widgets/menu_lateral.dart';
 
+/// Alta, edición y baja de usuarios del sistema (solo Admin).
 class UsuariosScreen extends StatefulWidget {
   const UsuariosScreen({super.key});
 
@@ -10,445 +14,267 @@ class UsuariosScreen extends StatefulWidget {
   State<UsuariosScreen> createState() => _UsuariosScreenState();
 }
 
-class _UsuariosScreenState extends State<UsuariosScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _UsuariosScreenState extends State<UsuariosScreen> {
+  final CatalogosStore _store = CatalogosStore.instancia;
+  String _busqueda = '';
 
-  // Catálogo de departamentos autorizados en el sistema
-  static const List<String> _departamentosValidos = [
-    'Almacén General',
-    'Soldadura y Chasis',
-    'Pintura y Estética',
-    'Mecánica Diésel',
-    'Administración General',
-  ];
+  Future<void> _abrirFormulario([UsuarioSistema? usuario]) => showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        builder: (ctx) => _FormularioUsuario(usuario: usuario),
+      );
 
-  // Base de datos local simulada de usuarios
-  final List<Map<String, dynamic>> _usuarios = [
-    {
-      'id': 'USR-001',
-      'nombre': 'Ing. Carlos Mendoza',
-      'email': 'admin@autosen.com',
-      'rol': 'admin',
-      'departamento': 'Administración General',
-      'activo': true,
-    },
-    {
-      'id': 'USR-002',
-      'nombre': 'Gabriela Gómez',
-      'email': 'gabriela@autosen.com',
-      'rol': 'encargado',
-      'departamento': 'Almacén General',
-      'activo': true,
-    },
-    {
-      'id': 'USR-003',
-      'nombre': 'Sergio Urey Morales',
-      'email': 'sergio@autosen.com',
-      'rol': 'encargado',
-      'departamento': 'Soldadura y Chasis',
-      'activo': true,
-    },
-  ];
-
-  final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nombreController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _searchController = TextEditingController();
-
-  String _rolSeleccionado = 'encargado';
-  String _departamentoSeleccionado = 'Mecánica Diésel';
-  String _searchQuery = '';
-  Map<String, dynamic>? _usuarioEnEdicion;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    _nombreController.dispose();
-    _emailController.dispose();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  String _generarNuevoId() {
-    return 'USR-${(_usuarios.length + 1).toString().padLeft(3, '0')}';
-  }
-
-  void _guardarUsuario() {
-    if (!_formKey.currentState!.validate()) return;
-
-    final String nombre = _nombreController.text.trim();
-    final String email = _emailController.text.trim();
-
-    setState(() {
-      if (_usuarioEnEdicion != null) {
-        _usuarioEnEdicion!['nombre'] = nombre;
-        _usuarioEnEdicion!['email'] = email;
-        _usuarioEnEdicion!['rol'] = _rolSeleccionado;
-        _usuarioEnEdicion!['departamento'] = _departamentoSeleccionado;
-        _usuarioEnEdicion = null;
-      } else {
-        _usuarios.insert(0, {
-          'id': _generarNuevoId(),
-          'nombre': nombre,
-          'email': email,
-          'rol': _rolSeleccionado,
-          'departamento': _departamentoSeleccionado,
-          'activo': true,
-        });
-      }
-
-      _nombreController.clear();
-      _emailController.clear();
-      _rolSeleccionado = 'encargado';
-      _departamentoSeleccionado = 'Mecánica Diésel';
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Usuario "$nombre" guardado exitosamente.'),
-        backgroundColor: Colors.black87,
-      ),
-    );
-
-    _tabController.animateTo(0);
-  }
-
-  void _iniciarEdicion(Map<String, dynamic> usuario) {
-    setState(() {
-      _usuarioEnEdicion = usuario;
-      _nombreController.text = usuario['nombre'];
-      _emailController.text = usuario['email'];
-      _rolSeleccionado = usuario['rol'];
-      _departamentoSeleccionado = usuario['departamento'];
-    });
-    _tabController.animateTo(1);
-  }
-
-  Future<void> _eliminarUsuario(Map<String, dynamic> usuario) async {
-    final bool confirmar = await ConfirmDialog.show(
+  Future<void> _eliminar(UsuarioSistema usuario) async {
+    final confirmar = await ConfirmDialog.show(
       context: context,
-      title: 'Eliminar Usuario',
-      message: '¿Estás seguro de que deseas revocar y eliminar a "${usuario['nombre']}" (${usuario['id']})? Esta acción no se puede deshacer.',
-      confirmText: 'Sí, Eliminar',
+      title: 'Eliminar usuario',
+      message: '¿Eliminar a "${usuario.nombre}" (${usuario.username})? Ya no podrá iniciar sesión.',
+      confirmText: 'Sí, eliminar',
       isDestructive: true,
-      icon: Icons.person_remove_rounded,
+      icon: Icons.person_remove_outlined,
     );
-
-    if (confirmar) {
-      setState(() {
-        _usuarios.removeWhere((u) => u['id'] == usuario['id']);
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Usuario ${usuario['nombre']} eliminado del sistema.'),
-            backgroundColor: AppTheme.danger,
-          ),
-        );
-      }
-    }
+    if (!confirmar) return;
+    final error = await _store.eliminarUsuario(usuario);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error ?? 'Usuario eliminado.'), backgroundColor: error == null ? AppTheme.success : AppTheme.danger),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: const Text('Gestión de Usuarios'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabAlignment: TabAlignment.center,
-          isScrollable: true,
-          indicatorColor: Colors.white,
-          indicatorWeight: 3,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white54,
-          tabs: [
-            const Tab(text: 'Lista de Usuarios'),
-            Tab(text: _usuarioEnEdicion == null ? 'Nuevo Usuario' : 'Editar Usuario'),
-          ],
+      drawer: const MenuLateral(seccion: Seccion.usuarios),
+      appBar: AppBar(title: const Text('Usuarios')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _abrirFormulario(),
+        backgroundColor: AppTheme.primary,
+        icon: const Icon(Icons.person_add_alt_1, color: Colors.white),
+        label: const Text('Nuevo usuario', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
+      body: ContenidoResponsivo(
+        child: ListenableBuilder(
+          listenable: _store,
+          builder: (context, _) {
+            final q = _busqueda.toLowerCase();
+            final lista = _store.usuarios
+                .where((u) => u.nombre.toLowerCase().contains(q) || u.username.toLowerCase().contains(q) || u.puesto.toLowerCase().contains(q))
+                .toList();
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Column(
+                children: [
+                  TextField(
+                    onChanged: (v) => setState(() => _busqueda = v),
+                    decoration: AppTheme.inputDecoration('Buscar por nombre, usuario o puesto...', icon: Icons.search),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: lista.isEmpty
+                        ? const Center(child: Text('No hay usuarios con ese criterio.', style: TextStyle(color: AppTheme.textSecondary)))
+                        : ListView.builder(
+                            padding: const EdgeInsets.only(bottom: 96),
+                            itemCount: lista.length,
+                            itemBuilder: (context, i) => _buildTarjeta(lista[i]),
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildListaUsuarios(),
-          _buildFormularioDefensivo(),
-        ],
-      ),
     );
   }
 
-  // ================================================================
-  // PESTAÑA 1: LISTADO DEFENSIVO (Sin pedir IDs a ciegas al usuario)
-  // ================================================================
-  Widget _buildListaUsuarios() {
-    final filtrados = _usuarios.where((u) {
-      final q = _searchQuery.toLowerCase();
-      return u['nombre'].toString().toLowerCase().contains(q) ||
-          u['id'].toString().toLowerCase().contains(q) ||
-          u['departamento'].toString().toLowerCase().contains(q);
-    }).toList();
-
-    return Padding(
-      padding: const EdgeInsets.all(20.0),
-      child: Column(
+  Widget _buildTarjeta(UsuarioSistema u) {
+    final esAdmin = u.rol == 'Admin';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.border),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Row(
         children: [
-          // Buscador controlado con botón de limpiar
-          TextField(
-            controller: _searchController,
-            onChanged: (val) => setState(() => _searchQuery = val),
-            decoration: AppTheme.inputDecoration(
-              'Buscar por nombre, ID o departamento...',
-              icon: Icons.search,
-              suffix: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() => _searchQuery = '');
-                      },
-                    )
-                  : null,
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: esAdmin ? AppTheme.primary : const Color(0xFFF1F2F4),
+            child: Text(
+              u.nombre.isEmpty ? '?' : u.nombre.trim()[0].toUpperCase(),
+              style: TextStyle(fontWeight: FontWeight.bold, color: esAdmin ? Colors.white : AppTheme.primary),
             ),
           ),
-          const SizedBox(height: 16),
-
+          const SizedBox(width: 14),
           Expanded(
-            child: filtrados.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.person_off_outlined, size: 54, color: Colors.grey.shade400),
-                        const SizedBox(height: 12),
-                        const Text('No se encontraron usuarios registrados.', style: TextStyle(color: AppTheme.textSecondary)),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: filtrados.length,
-                    itemBuilder: (context, index) {
-                      final u = filtrados[index];
-                      final bool esAdmin = u['rol'] == 'admin';
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: AppTheme.cardShadow,
-                          border: Border.all(color: AppTheme.border),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 46,
-                              height: 46,
-                              decoration: BoxDecoration(
-                                color: esAdmin ? Colors.black : const Color(0xFFEFF6FF),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                esAdmin ? Icons.admin_panel_settings : Icons.person,
-                                color: esAdmin ? Colors.white : AppTheme.info,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(u['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                                      const SizedBox(width: 8),
-                                      StatusBadge(
-                                        label: esAdmin ? 'ADMIN' : 'ENCARGADO',
-                                        type: esAdmin ? BadgeType.neutral : BadgeType.info,
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text('${u['id']} • ${u['departamento']}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                                  Text(u['email'], style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
-                                ],
-                              ),
-                            ),
-                            // Botones de acción protegidos
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, size: 20, color: AppTheme.primary),
-                              tooltip: 'Editar datos',
-                              onPressed: () => _iniciarEdicion(u),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
-                              tooltip: 'Eliminar usuario',
-                              onPressed: () => _eliminarUsuario(u),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(u.nombre, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text('@${u.username}${u.puesto.isEmpty ? '' : ' • ${u.puesto}'}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                const SizedBox(height: 4),
+                Text(rolesSistema[u.rol] ?? u.rol, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.info)),
+              ],
+            ),
+          ),
+          IconButton(icon: const Icon(Icons.edit_outlined, size: 20), tooltip: 'Editar', onPressed: () => _abrirFormulario(u)),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+            tooltip: 'Eliminar',
+            onPressed: () => _eliminar(u),
           ),
         ],
       ),
     );
   }
+}
 
-  // ================================================================
-  // PESTAÑA 2: FORMULARIO DEFENSIVO (Campos cerrados y validados)
-  // ================================================================
-  Widget _buildFormularioDefensivo() {
-    final String idMostrar = _usuarioEnEdicion != null ? _usuarioEnEdicion!['id'] : _generarNuevoId();
+class _FormularioUsuario extends StatefulWidget {
+  final UsuarioSistema? usuario;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20.0),
+  const _FormularioUsuario({this.usuario});
+
+  @override
+  State<_FormularioUsuario> createState() => _FormularioUsuarioState();
+}
+
+class _FormularioUsuarioState extends State<_FormularioUsuario> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nombre = TextEditingController(text: widget.usuario?.nombre ?? '');
+  late final TextEditingController _username = TextEditingController(text: widget.usuario?.username ?? '');
+  late final TextEditingController _puesto = TextEditingController(text: widget.usuario?.puesto ?? '');
+  late final TextEditingController _contacto = TextEditingController(text: widget.usuario?.contacto ?? '');
+  final TextEditingController _password = TextEditingController();
+  late String _rol = rolesSistema.containsKey(widget.usuario?.rol) ? widget.usuario!.rol : 'Usuario';
+  bool _ocultar = true;
+  bool _guardando = false;
+  String? _error;
+
+  bool get _editando => widget.usuario != null;
+
+  @override
+  void dispose() {
+    for (final c in [_nombre, _username, _puesto, _contacto, _password]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _guardar() async {
+    if (_guardando || !_formKey.currentState!.validate()) return;
+    setState(() => _guardando = true);
+    final error = await CatalogosStore.instancia.guardarUsuario(
+      existente: widget.usuario,
+      nombre: _nombre.text,
+      username: _username.text,
+      rol: _rol,
+      puesto: _puesto.text,
+      contacto: _contacto.text,
+      password: _password.text,
+    );
+    if (!mounted) return;
+    setState(() {
+      _guardando = false;
+      _error = error;
+    });
+    if (error != null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context);
+    messenger.showSnackBar(
+      SnackBar(content: Text(_editando ? 'Usuario actualizado.' : 'Usuario registrado.'), backgroundColor: AppTheme.success),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 24, right: 24, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 24),
       child: Form(
         key: _formKey,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: AppTheme.cardShadow,
-            border: Border.all(color: AppTheme.border),
-          ),
+        child: SingleChildScrollView(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    _usuarioEnEdicion == null ? 'Nuevo Empleado' : 'Modificar Empleado',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  Expanded(
+                    child: Text(_editando ? 'Editar usuario' : 'Nuevo usuario', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F2F4),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text('ID: $idMostrar (Auto)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  ),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
                 ],
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Divider(height: 1),
-              ),
-
-              // Nombre completo
-              const Text('Nombre completo *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.textPrimary)),
-              const SizedBox(height: 8),
+              _etiqueta('Nombre completo *'),
               TextFormField(
-                controller: _nombreController,
-                validator: (val) {
-                  if (val == null || val.trim().isEmpty) return 'El nombre es obligatorio';
-                  if (val.trim().length < 3) return 'Ingresa al menos 3 caracteres';
-                  return null;
-                },
+                controller: _nombre,
+                validator: (v) => (v == null || v.trim().length < 3) ? 'Ingresa al menos 3 caracteres' : null,
                 decoration: AppTheme.inputDecoration('Ej. Sergio Urey Morales', icon: Icons.badge_outlined),
               ),
-              const SizedBox(height: 18),
-
-              // Correo electrónico
-              const Text('Correo corporativo *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.textPrimary)),
-              const SizedBox(height: 8),
+              _etiqueta('Usuario para iniciar sesión *'),
               TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                validator: (val) {
-                  if (val == null || val.trim().isEmpty) return 'El correo es obligatorio';
-                  if (!val.contains('@') || !val.contains('.')) return 'Ingresa un formato de correo válido';
+                controller: _username,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingresa el usuario' : null,
+                decoration: AppTheme.inputDecoration('Ej. surey', icon: Icons.alternate_email),
+              ),
+              _etiqueta(_editando ? 'Nueva contraseña (déjala vacía para no cambiarla)' : 'Contraseña *'),
+              TextFormField(
+                controller: _password,
+                obscureText: _ocultar,
+                validator: (v) {
+                  final texto = v ?? '';
+                  if (!_editando && texto.length < 8) return 'Mínimo 8 caracteres';
+                  if (_editando && texto.isNotEmpty && texto.length < 8) return 'Mínimo 8 caracteres';
                   return null;
                 },
-                decoration: AppTheme.inputDecoration('ejemplo@autosen.com', icon: Icons.alternate_email),
-              ),
-              const SizedBox(height: 18),
-
-              // Rol de usuario (Cerrado a opciones del sistema)
-              const Text('Rol de acceso al sistema *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.textPrimary)),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                initialValue: _rolSeleccionado,
-                decoration: AppTheme.inputDecoration('Rol'),
-                items: const [
-                  DropdownMenuItem(value: 'encargado', child: Text('Encargado de Área (Operativo)')),
-                  DropdownMenuItem(value: 'admin', child: Text('Administrador (Acceso total)')),
-                ],
-                onChanged: (val) {
-                  if (val != null) setState(() => _rolSeleccionado = val);
-                },
-              ),
-              const SizedBox(height: 18),
-
-              // Departamento asignado (Cerrado a lista oficial, sin texto libre)
-              const Text('Área / Departamento asignado *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.textPrimary)),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                initialValue: _departamentoSeleccionado,
-                decoration: AppTheme.inputDecoration('Departamento'),
-                items: _departamentosValidos.map((dep) {
-                  return DropdownMenuItem(value: dep, child: Text(dep));
-                }).toList(),
-                onChanged: (val) {
-                  if (val != null) setState(() => _departamentoSeleccionado = val);
-                },
-              ),
-              const SizedBox(height: 32),
-
-              // Botones de acción
-              Row(
-                children: [
-                  if (_usuarioEnEdicion != null)
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          setState(() {
-                            _usuarioEnEdicion = null;
-                            _nombreController.clear();
-                            _emailController.clear();
-                          });
-                          _tabController.animateTo(0);
-                        },
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        ),
-                        child: const Text('Cancelar', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                  if (_usuarioEnEdicion != null) const SizedBox(width: 14),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed: _guardarUsuario,
-                      icon: const Icon(Icons.check_circle_outline, color: Colors.white),
-                      label: Text(
-                        _usuarioEnEdicion == null ? 'Registrar Usuario' : 'Guardar Cambios',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        elevation: 0,
-                      ),
-                    ),
+                decoration: AppTheme.inputDecoration(
+                  'Mínimo 8 caracteres',
+                  icon: Icons.lock_outline,
+                  suffix: IconButton(
+                    icon: Icon(_ocultar ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
+                    onPressed: () => setState(() => _ocultar = !_ocultar),
                   ),
+                ),
+              ),
+              _etiqueta('Rol *'),
+              DropdownButtonFormField<String>(
+                initialValue: _rol,
+                isExpanded: true,
+                decoration: AppTheme.inputDecoration('Rol', icon: Icons.admin_panel_settings_outlined),
+                items: [
+                  for (final r in rolesSistema.entries) DropdownMenuItem(value: r.key, child: Text(r.value, overflow: TextOverflow.ellipsis)),
                 ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _rol = v);
+                },
+              ),
+              _etiqueta('Puesto / área'),
+              TextFormField(controller: _puesto, decoration: AppTheme.inputDecoration('Ej. Almacén', icon: Icons.work_outline)),
+              _etiqueta('Contacto'),
+              TextFormField(controller: _contacto, decoration: AppTheme.inputDecoration('Teléfono o correo', icon: Icons.phone_outlined)),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!, style: const TextStyle(color: AppTheme.danger, fontWeight: FontWeight.w600, fontSize: 12)),
+              ],
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _guardando ? null : _guardar,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: Text(_editando ? 'Guardar cambios' : 'Registrar usuario',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
               ),
             ],
           ),
@@ -456,4 +282,9 @@ class _UsuariosScreenState extends State<UsuariosScreen> with SingleTickerProvid
       ),
     );
   }
+
+  Widget _etiqueta(String texto) => Padding(
+        padding: const EdgeInsets.only(top: 14, bottom: 6),
+        child: Text(texto, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+      );
 }

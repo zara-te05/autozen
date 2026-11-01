@@ -27,41 +27,36 @@ public class FacturaRepository : IFacturaRepository
     public async Task<IEnumerable<Factura>> GetAllAsync()
     {
         const string query = "SELECT \"id_factura\" AS \"IdFactura\", \"operacion_id\" AS \"OperacionId\", \"fechaEmision\" AS \"FechaEmision\", \"montoTotal\" AS \"MontoTotal\", \"estadoPago\" AS \"EstadoPago\" FROM FACTURA;";
-        using var connection = _context.CreateConnection();
-        return await connection.QueryAsync<Factura>(query);
+        return await _context.RunAsync((connection, tx) => connection.QueryAsync<Factura>(query, transaction: tx));
     }
 
     public async Task<Factura?> GetByIdAsync(int id)
     {
         const string query = "SELECT \"id_factura\" AS \"IdFactura\", \"operacion_id\" AS \"OperacionId\", \"fechaEmision\" AS \"FechaEmision\", \"montoTotal\" AS \"MontoTotal\", \"estadoPago\" AS \"EstadoPago\" FROM FACTURA WHERE \"id_factura\" = @Id;";
-        using var connection = _context.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Factura>(query, new { Id = id });
+        return await _context.RunAsync((connection, tx) => connection.QueryFirstOrDefaultAsync<Factura>(query, new { Id = id }, transaction: tx));
     }
 
     public async Task<Factura> CreateAsync(CreateFacturaDto dto)
     {
         const string query = "INSERT INTO FACTURA (\"operacion_id\", \"fechaEmision\", \"montoTotal\", \"estadoPago\") VALUES (@OperacionId, @FechaEmision, @MontoTotal, @EstadoPago) RETURNING \"id_factura\" AS \"IdFactura\", \"operacion_id\" AS \"OperacionId\", \"fechaEmision\" AS \"FechaEmision\", \"montoTotal\" AS \"MontoTotal\", \"estadoPago\" AS \"EstadoPago\";";
 
-        using var connection = _context.CreateConnection();
-        return await connection.QuerySingleAsync<Factura>(query, dto);
+        return await _context.RunAsync((connection, tx) => connection.QuerySingleAsync<Factura>(query, dto, transaction: tx));
     }
 
     public async Task<bool> UpdateAsync(int id, CreateFacturaDto dto)
     {
         const string query = "UPDATE FACTURA SET \"operacion_id\" = @OperacionId, \"fechaEmision\" = @FechaEmision, \"montoTotal\" = @MontoTotal, \"estadoPago\" = @EstadoPago WHERE \"id_factura\" = @Id;";
 
-        using var connection = _context.CreateConnection();
         var parameters = new DynamicParameters(dto);
         parameters.Add("Id", id);
-        var rowsAffected = await connection.ExecuteAsync(query, parameters);
+        var rowsAffected = await _context.RunAsync((connection, tx) => connection.ExecuteAsync(query, parameters, transaction: tx));
         return rowsAffected > 0;
     }
 
     public async Task<bool> DeleteAsync(int id)
     {
         const string query = "DELETE FROM FACTURA WHERE \"id_factura\" = @Id;";
-        using var connection = _context.CreateConnection();
-        var rowsAffected = await connection.ExecuteAsync(query, new { Id = id });
+        var rowsAffected = await _context.RunAsync((connection, tx) => connection.ExecuteAsync(query, new { Id = id }, transaction: tx));
         return rowsAffected > 0;
     }
 }

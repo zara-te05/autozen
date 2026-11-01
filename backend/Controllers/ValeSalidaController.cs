@@ -1,12 +1,14 @@
 using Autozen.Api.DTOs;
 using Autozen.Api.Models;
 using Autozen.Api.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Autozen.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize] // Leer: cualquier usuario autenticado. Escribir: Admin y jefe de Almacén
 public class ValeSalidaController : ControllerBase
 {
     private readonly IValeSalidaRepository _valesalidaRepository;
@@ -29,12 +31,13 @@ public class ValeSalidaController : ControllerBase
         var item = await _valesalidaRepository.GetByIdAsync(id);
         if (item is null)
         {
-            return NotFound(new { message = "ValeSalida no encontrado." });
+            return Problem(detail: "ValeSalida no encontrado.", statusCode: StatusCodes.Status404NotFound);
         }
         return Ok(item);
     }
 
     [HttpPost]
+    [Authorize(Roles = Edicion.Almacen)]
     public async Task<ActionResult<ValeSalida>> Create([FromBody] CreateValeSalidaDto dto)
     {
         var created = await _valesalidaRepository.CreateAsync(dto);
@@ -42,23 +45,25 @@ public class ValeSalidaController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = Edicion.Almacen)]
     public async Task<IActionResult> Update(int id, [FromBody] CreateValeSalidaDto dto)
     {
         var updated = await _valesalidaRepository.UpdateAsync(id, dto);
         if (!updated)
         {
-            return NotFound(new { message = "ValeSalida no encontrado para actualizar." });
+            return Problem(detail: "ValeSalida no encontrado para actualizar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = Edicion.Almacen)]
     public async Task<IActionResult> Delete(int id)
     {
         var deleted = await _valesalidaRepository.DeleteAsync(id);
         if (!deleted)
         {
-            return NotFound(new { message = "ValeSalida no encontrado para eliminar." });
+            return Problem(detail: "ValeSalida no encontrado para eliminar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }

@@ -1,37 +1,22 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 
-/// Constantes de configuración de la API .NET Backend para AutoZen.
+/// Dirección del backend .NET.
+///
+/// Por defecto apunta a la PC de desarrollo (puerto 5102 de `dotnet run`):
+/// - Emulador de Android: 10.0.2.2 es el localhost de la PC.
+/// - Windows: localhost.
+/// Para un teléfono físico o un servidor, pásala al compilar:
+///   flutter run --dart-define=API_URL=http://192.168.1.50:5102/api
 class ApiConstants {
-  /// Retorna la URL base adecuada según la plataforma:
-  /// - En Android Emulator: 10.0.2.2 apunta al localhost de tu PC.
-  /// - En Windows / Web / iOS Simulator: localhost funciona directamente.
+  static const String _definida = String.fromEnvironment('API_URL');
+
   static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://localhost:5000/api';
-    }
-    if (Platform.isAndroid) {
-      return 'http://10.0.2.2:5000/api';
-    }
-    return 'http://localhost:5000/api';
+    if (_definida.isNotEmpty) return _definida;
+    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5102/api';
+    return 'http://localhost:5102/api';
   }
 
-  // Endpoints del backend en .NET
-  static const String usuarios = '/usuarios';
-  static const String trabajadores = '/trabajadores';
-  static const String clientes = '/clientes';
-  static const String camiones = '/camiones';
-  static const String proveedores = '/proveedores';
-  static const String almacen = '/almacen';
-  static const String operaciones = '/operaciones';
-  static const String cotizaciones = '/cotizaciones';
-  static const String detallesCotizacion = '/detalles-cotizacion';
-  static const String solicitudesAlmacen = '/solicitudes-almacen';
-  static const String equiposAlmacen = '/equipos-almacen';
-  static const String solicitudesCompra = '/solicitudes-compra';
-  static const String compras = '/compras';
-  static const String devolucionesProveedor = '/devoluciones-proveedor';
-  static const String movimientosAlmacen = '/movimientos-almacen';
-  static const String facturas = '/facturas';
-  static const String valesSalida = '/vales-salida';
+  /// Raíz del servidor (sin /api), para URLs que el backend devuelve como "/api/...".
+  static String get servidor => baseUrl.endsWith('/api') ? baseUrl.substring(0, baseUrl.length - 4) : baseUrl;
 }

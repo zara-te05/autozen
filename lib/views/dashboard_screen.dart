@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'login_screen.dart'; // Importante para poder regresar al Login
+import '../services/sesion.dart';
+import '../services/avisos_store.dart';
+import 'avisos_screen.dart';
 import 'evaluacion_screen.dart'; 
 import 'usuarios_screen.dart';
 import 'almacen_screen.dart';
 import 'proyectos_screen.dart';
+import '../models/proyecto_taller.dart';
 import 'compras_screen.dart';
 import 'departamentos_screen.dart'; 
+import 'proveedores_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String rol;
@@ -17,6 +22,20 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   bool _isExpanded = true; 
+  bool _sincronizando = false;
+
+  Future<void> _sincronizar() async {
+    setState(() => _sincronizando = true);
+    final error = await Sesion.sincronizar();
+    if (!mounted) return;
+    setState(() => _sincronizando = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(error ?? 'Datos actualizados.'),
+        backgroundColor: error == null ? Colors.green.shade700 : Colors.redAccent,
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -51,6 +70,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context); // Cierra el diálogo primero
+              Sesion.cerrar(); // Borra el token y regresa los datos al modo demo
               // Navega al Login y DESTRUYE el historial de pantallas anterior
               Navigator.pushAndRemoveUntil(
                 context,
@@ -91,11 +111,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.only(top: 10, left: 20, right: 20, bottom: 20),
-                  child: GridView.count(
+                  // Tarjetas de ancho máximo fijo: 2 columnas en teléfono, más columnas en ventanas anchas
+                  child: GridView.extent(
                     padding: EdgeInsets.zero,
-                    crossAxisCount: 2,
+                    maxCrossAxisExtent: 240,
                     crossAxisSpacing: 16.0,
                     mainAxisSpacing: 16.0,
+                    childAspectRatio: 0.95,
                     children: _generarTarjetasSegunRol(context),
                   ),
                 ),
@@ -127,6 +149,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('AUTÖSEN', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 2.0)),
+                        const Spacer(),
+                        if (Sesion.modoDemo)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(8)),
+                            child: const Text('MODO DEMO', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold)),
+                          )
+                        else
+                          IconButton(
+                            onPressed: _sincronizando ? null : _sincronizar,
+                            icon: _sincronizando
+                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70))
+                                : const Icon(Icons.sync, color: Colors.white70),
+                            tooltip: 'Actualizar datos del servidor',
+                          ),
+                        ListenableBuilder(
+                          listenable: AvisosStore.instancia,
+                          builder: (context, _) {
+                            final n = AvisosStore.instancia.noLeidos;
+                            return IconButton(
+                              tooltip: 'Avisos',
+                              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AvisosScreen())),
+                              icon: Badge(
+                                isLabelVisible: n > 0,
+                                label: Text(n > 9 ? '9+' : '$n'),
+                                child: const Icon(Icons.notifications_none, color: Colors.white70),
+                              ),
+                            );
+                          },
+                        ),
                         IconButton(
                           onPressed: () => _mostrarDialogoCerrarSesion(context),
                           icon: const Icon(Icons.logout, color: Colors.white70),
@@ -135,9 +187,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 12), // Margen ajustado
-                    Text(tituloVista, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+                    // Se reduce si no cabe, en vez de partirse en dos líneas y salirse de la cabecera
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(tituloVista, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+                    ),
                     const SizedBox(height: 8),
-                    const Text('¿Qué área vamos a gestionar hoy?', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    const Text(
+                      '¿Qué área vamos a gestionar hoy?',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
                   ],
                 ),
               ),
@@ -160,8 +222,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }));
     }
 
-    tarjetas.add(_buildMenuCard(context, 'Proyectos', Icons.folder_open, () {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const ProyectosScreen()));
+    // El primer paso siempre es evaluar el daño; de ahí nace el proyecto
+    tarjetas.add(_buildMenuCard(context, 'Evaluación de Daños', Icons.fact_check_outlined, () {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const EvaluacionScreen()));
+    }));
+    tarjetas.add(_buildMenuCard(context, 'Proyectos de Clientes', Icons.folder_open, () {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const ProyectosScreen(tipo: TipoProyecto.cliente)));
+    }));
+    tarjetas.add(_buildMenuCard(context, 'Proyectos de Aseguradora', Icons.verified_user_outlined, () {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const ProyectosScreen(tipo: TipoProyecto.aseguradora)));
     }));
     tarjetas.add(_buildMenuCard(context, 'Compras', Icons.shopping_bag_outlined, () {
       Navigator.push(context, MaterialPageRoute(builder: (context) => const ComprasScreen()));
@@ -169,8 +238,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     tarjetas.add(_buildMenuCard(context, 'Almacén', Icons.inventory_2_outlined, () {
       Navigator.push(context, MaterialPageRoute(builder: (context) => const AlmacenScreen()));
     }));
-    tarjetas.add(_buildMenuCard(context, 'Evaluación', Icons.fact_check_outlined, () {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const EvaluacionScreen()));
+    tarjetas.add(_buildMenuCard(context, 'Proveedores', Icons.storefront_outlined, () {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const ProveedoresScreen()));
     }));
 
     return tarjetas;
@@ -207,7 +276,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Icon(icon, size: 28, color: Colors.black87),
                 ),
                 const Spacer(),
-                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black),
+                ),
                 const SizedBox(height: 4),
                 const Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.black38),
               ],

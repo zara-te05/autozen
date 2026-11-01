@@ -1,12 +1,14 @@
 using Autozen.Api.DTOs;
 using Autozen.Api.Models;
 using Autozen.Api.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Autozen.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = Roles.Admin)] // Contiene salarios: solo Admin
 public class TrabajadorController : ControllerBase
 {
     private readonly ITrabajadorRepository _trabajadorRepository;
@@ -29,7 +31,7 @@ public class TrabajadorController : ControllerBase
         var item = await _trabajadorRepository.GetByIdAsync(id);
         if (item is null)
         {
-            return NotFound(new { message = "Trabajador no encontrado." });
+            return Problem(detail: "Trabajador no encontrado.", statusCode: StatusCodes.Status404NotFound);
         }
         return Ok(item);
     }
@@ -47,7 +49,7 @@ public class TrabajadorController : ControllerBase
         var updated = await _trabajadorRepository.UpdateAsync(id, dto);
         if (!updated)
         {
-            return NotFound(new { message = "Trabajador no encontrado para actualizar." });
+            return Problem(detail: "Trabajador no encontrado para actualizar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }
@@ -58,7 +60,7 @@ public class TrabajadorController : ControllerBase
         var deleted = await _trabajadorRepository.DeleteAsync(id);
         if (!deleted)
         {
-            return NotFound(new { message = "Trabajador no encontrado para eliminar." });
+            return Problem(detail: "Trabajador no encontrado para eliminar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }

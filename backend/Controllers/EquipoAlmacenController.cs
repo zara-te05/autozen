@@ -1,12 +1,14 @@
 using Autozen.Api.DTOs;
 using Autozen.Api.Models;
 using Autozen.Api.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Autozen.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize] // Leer: cualquier usuario autenticado. Escribir: Admin y jefe de Almacén
 public class EquipoAlmacenController : ControllerBase
 {
     private readonly IEquipoAlmacenRepository _equipoalmacenRepository;
@@ -29,12 +31,13 @@ public class EquipoAlmacenController : ControllerBase
         var item = await _equipoalmacenRepository.GetByIdAsync(id);
         if (item is null)
         {
-            return NotFound(new { message = "EquipoAlmacen no encontrado." });
+            return Problem(detail: "EquipoAlmacen no encontrado.", statusCode: StatusCodes.Status404NotFound);
         }
         return Ok(item);
     }
 
     [HttpPost]
+    [Authorize(Roles = Edicion.Almacen)]
     public async Task<ActionResult<EquipoAlmacen>> Create([FromBody] CreateEquipoAlmacenDto dto)
     {
         var created = await _equipoalmacenRepository.CreateAsync(dto);
@@ -42,23 +45,25 @@ public class EquipoAlmacenController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = Edicion.Almacen)]
     public async Task<IActionResult> Update(int id, [FromBody] CreateEquipoAlmacenDto dto)
     {
         var updated = await _equipoalmacenRepository.UpdateAsync(id, dto);
         if (!updated)
         {
-            return NotFound(new { message = "EquipoAlmacen no encontrado para actualizar." });
+            return Problem(detail: "EquipoAlmacen no encontrado para actualizar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = Edicion.Almacen)]
     public async Task<IActionResult> Delete(int id)
     {
         var deleted = await _equipoalmacenRepository.DeleteAsync(id);
         if (!deleted)
         {
-            return NotFound(new { message = "EquipoAlmacen no encontrado para eliminar." });
+            return Problem(detail: "EquipoAlmacen no encontrado para eliminar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }

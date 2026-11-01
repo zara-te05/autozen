@@ -51,3 +51,14 @@ app.*.map.json
 **/bin/
 **/obj/
 **/.vs/
+
+# Backend .NET
+backend/bin/
+backend/obj/
+backend/.vs/
+
+# Secretos de despliegue
+.env
+
+# Fotos subidas al backend en desarrollo
+backend/fotos/

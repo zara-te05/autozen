@@ -1,5 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../models/almacen_inventario.dart';
+import '../models/proyecto_taller.dart';
+import '../models/resguardo.dart';
+import '../services/almacen_store.dart';
+import '../services/proyectos_store.dart';
+import '../utils/app_theme.dart';
+import '../utils/formato_fecha.dart';
+import '../widgets/confirm_dialog.dart';
+import '../widgets/contenido_responsivo.dart';
+import '../widgets/dialogo_categorias.dart';
+import '../widgets/formulario_articulo.dart';
+import '../widgets/formulario_resguardo.dart';
+import '../widgets/status_badge.dart';
+import '../widgets/menu_lateral.dart';
 
 class AlmacenScreen extends StatefulWidget {
   const AlmacenScreen({super.key});
@@ -9,365 +22,67 @@ class AlmacenScreen extends StatefulWidget {
 }
 
 class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  final AlmacenStore _almacen = AlmacenStore.instancia;
+  final ProyectosStore _proyectos = ProyectosStore.instancia;
+  late final TabController _tabController;
 
-  // ----------------------------------------------------
-  // DATOS DEL INVENTARIO (Catálogo de piezas del almacén)
-  // ----------------------------------------------------
-  final List<Map<String, dynamic>> _inventario = [
-    {
-      'id': 'ALM-001',
-      'nombre': 'Balatas de freno cerámicas',
-      'categoria': 'Frenos',
-      'cantidad': 14,
-      'costo': 1250.0,
-      'ubicacion': 'Estante B-2',
-    },
-    {
-      'id': 'ALM-002',
-      'nombre': 'Aceite de Motor Sintético 15W40 (Lts)',
-      'categoria': 'Fluidos',
-      'cantidad': 50,
-      'costo': 320.0,
-      'ubicacion': 'Zona C-1',
-    },
-    {
-      'id': 'ALM-003',
-      'nombre': 'Filtro de Aire Kenworth T680',
-      'categoria': 'Motor',
-      'cantidad': 3,
-      'costo': 890.0,
-      'ubicacion': 'Estante A-4',
-    },
-    {
-      'id': 'ALM-004',
-      'nombre': 'Kit de Embrague Reforzado',
-      'categoria': 'Transmisión',
-      'cantidad': 2,
-      'costo': 8400.0,
-      'ubicacion': 'Pasillo 1',
-    },
-    {
-      'id': 'ALM-005',
-      'nombre': 'Amortiguador Delantero Volvo FH',
-      'categoria': 'Suspensión',
-      'cantidad': 0,
-      'costo': 3100.0,
-      'ubicacion': 'Estante D-1',
-    },
-    {
-      'id': 'ALM-006',
-      'nombre': 'Sensor de Presión de Riel Diésel',
-      'categoria': 'Eléctrico',
-      'cantidad': 8,
-      'costo': 1650.0,
-      'ubicacion': 'Gaveta E-3',
-    },
-    {
-      'id': 'ALM-007',
-      'nombre': 'Faro Principal LED Delantero',
-      'categoria': 'Carrocería',
-      'cantidad': 4,
-      'costo': 4200.0,
-      'ubicacion': 'Estante F-2',
-    },
-  ];
-
-  // ----------------------------------------------------
-  // CONTROLADORES PARA ALTA DE PIEZAS
-  // ----------------------------------------------------
-  final _formKeyAlta = GlobalKey<FormState>();
-  final TextEditingController _nombrePiezaController = TextEditingController();
-  final TextEditingController _codigoPiezaController = TextEditingController(text: 'ALM-008');
-  final TextEditingController _ubicacionPiezaController = TextEditingController();
-  final TextEditingController _cantidadAltaController = TextEditingController(text: '1');
-  final TextEditingController _costoAltaController = TextEditingController(text: '0.00');
-  
-  int _cantidadAlta = 1;
-  double _costoAlta = 0.0;
-  String _categoriaSeleccionada = 'Frenos';
-  final List<String> _categorias = [
-    'Frenos',
-    'Motor',
-    'Transmisión',
-    'Suspensión',
-    'Eléctrico',
-    'Fluidos',
-    'Carrocería',
-    'Herramientas',
-  ];
-
-  // ----------------------------------------------------
-  // ESTADOS DEL DATAGRID (Ordenamiento, Filtros y Vista)
-  // ----------------------------------------------------
-  final TextEditingController _searchGridController = TextEditingController();
+  // Desglose
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  String _filtroEstado = 'Todos'; // 'Todos', 'En Stock', 'Bajo Stock', 'Agotado'
-  int _sortColumnIndex = 3; // Por defecto ordenar por Stock
-  bool _sortAscending = true;
-  bool _isTableView = true; // true: DataGrid tabular, false: Vista tarjetas compactas
+  String _filtro = 'Todos'; // Todos, Materiales, Herramientas, Bajo stock, Agotados
+  bool _vistaTabla = true;
+  int _ordenColumna = 1;
+  bool _ordenAscendente = true;
 
-  // ----------------------------------------------------
-  // CONTROLADORES PARA VALES DE SALIDA
-  // ----------------------------------------------------
-  final TextEditingController _horaExtraccionController = TextEditingController();
-  final TextEditingController _horaDevolucionController = TextEditingController();
-  final TextEditingController _proyectoDestinoController = TextEditingController();
-  String? _piezaValeSeleccionada;
-  int _cantidadVale = 1;
-  final TextEditingController _cantidadValeController = TextEditingController(text: '1');
+  // Vale de material
+  final _formMaterial = GlobalKey<FormState>();
+  String? _proyectoMaterial;
+  String? _articuloMaterial;
+  final TextEditingController _cantidadMaterial = TextEditingController();
+  final TextEditingController _entregadoMaterial = TextEditingController();
+
+  // Vale de herramienta
+  final _formHerramienta = GlobalKey<FormState>();
+  String? _proyectoHerramienta;
+  String? _articuloHerramienta;
+  final TextEditingController _cantidadHerramienta = TextEditingController(text: '1');
+  final TextEditingController _entregadoHerramienta = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-
-    final ahora = TimeOfDay.now();
-    _horaExtraccionController.text = "${ahora.hour}:${ahora.minute.toString().padLeft(2, '0')}";
-    _piezaValeSeleccionada = _inventario.first['nombre'];
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    _nombrePiezaController.dispose();
-    _codigoPiezaController.dispose();
-    _ubicacionPiezaController.dispose();
-    _cantidadAltaController.dispose();
-    _costoAltaController.dispose();
-    _searchGridController.dispose();
-    _horaExtraccionController.dispose();
-    _horaDevolucionController.dispose();
-    _proyectoDestinoController.dispose();
-    _cantidadValeController.dispose();
+    for (final c in [_searchController, _cantidadMaterial, _entregadoMaterial, _cantidadHerramienta, _entregadoHerramienta]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  // ----------------------------------------------------
-  // LOGICA PARA ALTA DE PIEZAS
-  // ----------------------------------------------------
-  void _guardarNuevaPieza() {
-    if (!_formKeyAlta.currentState!.validate()) return;
-
-    final String nombre = _nombrePiezaController.text.trim();
-    final String codigo = _codigoPiezaController.text.trim().isEmpty 
-        ? 'ALM-${(_inventario.length + 1).toString().padLeft(3, '0')}' 
-        : _codigoPiezaController.text.trim();
-    final String ubicacion = _ubicacionPiezaController.text.trim().isEmpty 
-        ? 'Almacén Central' 
-        : _ubicacionPiezaController.text.trim();
-
-    setState(() {
-      _inventario.insert(0, {
-        'id': codigo,
-        'nombre': nombre,
-        'categoria': _categoriaSeleccionada,
-        'cantidad': _cantidadAlta,
-        'costo': _costoAlta,
-        'ubicacion': ubicacion,
-      });
-
-      // Generar nuevo código sugerido y limpiar
-      _nombrePiezaController.clear();
-      _ubicacionPiezaController.clear();
-      _cantidadAlta = 1;
-      _cantidadAltaController.text = '1';
-      _costoAlta = 0.0;
-      _costoAltaController.text = '0.00';
-      _codigoPiezaController.text = 'ALM-${(_inventario.length + 1).toString().padLeft(3, '0')}';
-    });
-
+  void _mensaje(String texto, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Pieza "$nombre" registrada exitosamente en el DataGrid.'),
-        backgroundColor: Colors.black87,
-        action: SnackBarAction(
-          label: 'Ver Desglose',
-          textColor: Colors.amberAccent,
-          onPressed: () {
-            _tabController.animateTo(1);
-          },
-        ),
-      ),
+      SnackBar(content: Text(texto), backgroundColor: error ? AppTheme.danger : AppTheme.success),
     );
-  }
-
-  // ----------------------------------------------------
-  // FILTRADO Y ORDENAMIENTO DEL DATAGRID
-  // ----------------------------------------------------
-  List<Map<String, dynamic>> get _piezasFiltradas {
-    List<Map<String, dynamic>> lista = _inventario.where((item) {
-      final matchSearch = item['nombre'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          item['id'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          item['categoria'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          item['ubicacion'].toString().toLowerCase().contains(_searchQuery.toLowerCase());
-
-      if (!matchSearch) return false;
-
-      final int cant = item['cantidad'] as int;
-      if (_filtroEstado == 'En Stock') return cant >= 5;
-      if (_filtroEstado == 'Bajo Stock') return cant > 0 && cant < 5;
-      if (_filtroEstado == 'Agotado') return cant == 0;
-      return true;
-    }).toList();
-
-    lista.sort((a, b) {
-      dynamic valA;
-      dynamic valB;
-
-      switch (_sortColumnIndex) {
-        case 0:
-          valA = a['id'];
-          valB = b['id'];
-          break;
-        case 1:
-          valA = a['nombre'];
-          valB = b['nombre'];
-          break;
-        case 2:
-          valA = a['categoria'];
-          valB = b['categoria'];
-          break;
-        case 3:
-          valA = a['cantidad'];
-          valB = b['cantidad'];
-          break;
-        case 4:
-          valA = a['costo'];
-          valB = b['costo'];
-          break;
-        case 5:
-          valA = (a['cantidad'] as int) * (a['costo'] as double);
-          valB = (b['cantidad'] as int) * (b['costo'] as double);
-          break;
-        default:
-          valA = a['nombre'];
-          valB = b['nombre'];
-      }
-
-      final comp = Comparable.compare(valA as Comparable, valB as Comparable);
-      return _sortAscending ? comp : -comp;
-    });
-
-    return lista;
-  }
-
-  void _onSort(int columnIndex, bool ascending) {
-    setState(() {
-      _sortColumnIndex = columnIndex;
-      _sortAscending = ascending;
-    });
-  }
-
-  // Diálogo para ajustar stock de una fila del DataGrid
-  void _mostrarDialogoAjustarStock(Map<String, dynamic> item) {
-    int stockAjuste = item['cantidad'] as int;
-    final stockController = TextEditingController(text: stockAjuste.toString());
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Row(
-                children: [
-                  const Icon(Icons.tune, color: Colors.black87),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Ajustar Stock: ${item['nombre']}',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Código: ${item['id']} • ${item['ubicacion']}', style: const TextStyle(color: Colors.black54, fontSize: 13)),
-                  const SizedBox(height: 20),
-                  const Text('Nuevo Stock:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  const SizedBox(height: 10),
-                  _buildStepperNumerico(
-                    valor: stockAjuste,
-                    controller: stockController,
-                    min: 0,
-                    onChanged: (nuevo) {
-                      setModalState(() {
-                        stockAjuste = nuevo;
-                      });
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancelar', style: TextStyle(color: Colors.black54)),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      item['cantidad'] = stockAjuste;
-                    });
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Stock actualizado para ${item['nombre']} a $stockAjuste unidades.')),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Guardar Ajuste', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _seleccionarHora(BuildContext context, TextEditingController controlador) async {
-    final TimeOfDay? seleccion = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Colors.black,
-              onPrimary: Colors.white,
-              onSurface: Colors.black,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (seleccion != null) {
-      setState(() {
-        controlador.text = "${seleccion.hour}:${seleccion.minute.toString().padLeft(2, '0')}";
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F4F5),
+      backgroundColor: AppTheme.background,
+      drawer: const MenuLateral(seccion: Seccion.almacen),
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Gestión de Almacén', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-        centerTitle: true,
-        elevation: 0,
+        title: const Text('Gestión de Almacén'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.category_outlined),
+            tooltip: 'Administrar categorías',
+            onPressed: () => mostrarDialogoCategorias(context),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -379,285 +94,24 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
           tabs: const [
             Tab(text: 'Alta de Piezas'),
             Tab(text: 'Desglose de inventario'),
-            Tab(text: 'Vales de Salida'),
+            Tab(text: 'Vales de Material'),
+            Tab(text: 'Herramientas (deben volver)'),
+            Tab(text: 'Placas y resguardos'),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildAltaPiezas(),
-          _buildDataGridInventario(),
-          _buildValeSalida(context),
-        ],
-      ),
-    );
-  }
-
-  // ================================================================
-  // PESTAÑA 1: ALTA DE PIEZAS (CON RECOLECTOR DE NÚMEROS SEGURO)
-  // ================================================================
-  Widget _buildAltaPiezas() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20.0),
-      child: Form(
-        key: _formKeyAlta,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 15, offset: const Offset(0, 8))],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      body: ContenidoResponsivo(
+        anchoMaximo: 1200,
+        child: ListenableBuilder(
+          listenable: Listenable.merge([_almacen, _proyectos]),
+          builder: (context, _) => TabBarView(
+            controller: _tabController,
             children: [
-              // Encabezado de la tarjeta
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.05), shape: BoxShape.circle),
-                    child: const Icon(Icons.playlist_add, color: Colors.black87, size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Registro Seguro de Piezas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                        Text('Valores y stock con límites protegidos', style: TextStyle(color: Colors.black54, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Divider(height: 1),
-              ),
-
-              // Campo: Nombre de la pieza
-              _buildEtiqueta('Nombre de la pieza *'),
-              TextFormField(
-                controller: _nombrePiezaController,
-                validator: (val) {
-                  if (val == null || val.trim().isEmpty) return 'Ingresa el nombre o descripción de la pieza';
-                  if (val.trim().length < 3) return 'El nombre debe tener al menos 3 caracteres';
-                  return null;
-                },
-                decoration: _buildInputDecoration('Ej. Amortiguador Trasero Reforzado', icon: Icons.handyman_outlined),
-              ),
-              const SizedBox(height: 18),
-
-              // Fila: Código y Categoría
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 1,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildEtiqueta('Código / SKU'),
-                        TextFormField(
-                          controller: _codigoPiezaController,
-                          decoration: _buildInputDecoration('Ej. ALM-008', icon: Icons.qr_code),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    flex: 1,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildEtiqueta('Categoría'),
-                        DropdownButtonFormField<String>(
-                          initialValue: _categoriaSeleccionada,
-                          decoration: _buildInputDecoration('Categoría'),
-                          items: _categorias.map((cat) {
-                            return DropdownMenuItem(value: cat, child: Text(cat, style: const TextStyle(fontSize: 14)));
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) setState(() => _categoriaSeleccionada = val);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 22),
-
-              // ======================================================
-              // RECOLECTOR DE NÚMEROS SEGURO PARA CANTIDAD DE PIEZAS
-              // ======================================================
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8F9FA),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.shield_outlined, size: 18, color: Colors.black87),
-                            const SizedBox(width: 6),
-                            const Text(
-                              'Cantidad a Ingresar *',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
-                            ),
-                          ],
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.green.shade200),
-                          ),
-                          child: const Text('Mínimo 1', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Selector protegido contra valores negativos, letras y caracteres accidentales.',
-                      style: TextStyle(color: Colors.black54, fontSize: 11),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Componente Stepper Seguro
-                    _buildStepperNumerico(
-                      valor: _cantidadAlta,
-                      controller: _cantidadAltaController,
-                      min: 1,
-                      max: 9999,
-                      onChanged: (nuevo) {
-                        setState(() {
-                          _cantidadAlta = nuevo;
-                        });
-                      },
-                    ),
-
-                    const SizedBox(height: 12),
-                    // Botones de paso rápido (Quick Chips)
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        _buildQuickStepChip('+1', 1),
-                        _buildQuickStepChip('+5', 5),
-                        _buildQuickStepChip('+10', 10),
-                        _buildQuickStepChip('+25', 25),
-                        _buildQuickStepChip('+50', 50),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // ======================================================
-              // RECOLECTOR SEGURO DE PRECIO / COSTO UNITARIO
-              // ======================================================
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8F9FA),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Costo Unitario de Adquisición',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
-                        ),
-                        Text(
-                          'Valor total: \$ ${(_cantidadAlta * _costoAlta).toStringAsFixed(2)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _costoAltaController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-                      ],
-                      decoration: InputDecoration(
-                        prefixIcon: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          child: Text('\$', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87)),
-                        ),
-                        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-                        hintText: '0.00',
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      ),
-                      onChanged: (val) {
-                        setState(() {
-                          _costoAlta = double.tryParse(val) ?? 0.0;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    // Quick price chips
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        _buildQuickPriceChip(r'+$100', 100),
-                        _buildQuickPriceChip(r'+$500', 500),
-                        _buildQuickPriceChip(r'+$1,000', 1000),
-                        _buildQuickPriceChip(r'+$5,000', 5000),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 18),
-
-              // Ubicación en almacén
-              _buildEtiqueta('Ubicación Física en Almacén'),
-              TextFormField(
-                controller: _ubicacionPiezaController,
-                decoration: _buildInputDecoration('Ej. Pasillo 3, Estante B-4', icon: Icons.location_on_outlined),
-              ),
-              const SizedBox(height: 28),
-
-              // Botón Guardar Pieza
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: _guardarNuevaPieza,
-                  icon: const Icon(Icons.save_rounded, color: Colors.white),
-                  label: const Text('Dar de Alta en Almacén', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 2,
-                  ),
-                ),
-              ),
+              ContenidoResponsivo(anchoMaximo: 760, child: FormularioArticulo(onGuardado: () => _tabController.animateTo(1))),
+              _buildDesglose(),
+              _buildValesMaterial(),
+              _buildHerramientas(),
+              _buildResguardos(),
             ],
           ),
         ),
@@ -665,527 +119,136 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
     );
   }
 
-  // Componente Reutilizable: Stepper Numérico Seguro
-  Widget _buildStepperNumerico({
-    required int valor,
-    required TextEditingController controller,
-    required ValueChanged<int> onChanged,
-    int min = 0,
-    int max = 99999,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: Row(
-        children: [
-          // Botón Decrementar (-)
-          IconButton(
-            onPressed: valor > min
-                ? () {
-                    final nuevo = valor - 1;
-                    controller.text = nuevo.toString();
-                    onChanged(nuevo);
-                  }
-                : null,
-            icon: const Icon(Icons.remove_circle_outline),
-            color: Colors.black87,
-            disabledColor: Colors.black12,
-            iconSize: 28,
-            tooltip: 'Reducir 1',
-          ),
+  // =====================================================================
+  // DESGLOSE DE INVENTARIO
+  // =====================================================================
 
-          // Caja de texto central blindada (sólo números)
-          Expanded(
-            child: TextField(
-              controller: controller,
-              textAlign: TextAlign.center,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(5),
-              ],
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.black),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-                isDense: true,
-              ),
-              onChanged: (str) {
-                int parsed = int.tryParse(str) ?? min;
-                if (parsed < min) parsed = min;
-                if (parsed > max) parsed = max;
-                onChanged(parsed);
-              },
-            ),
-          ),
+  List<Articulo> get _articulosFiltrados {
+    final q = _searchQuery.trim().toLowerCase();
+    final lista = _almacen.articulos.where((a) {
+      final coincide = q.isEmpty || a.nombre.toLowerCase().contains(q) || a.id.toLowerCase().contains(q) || a.categoria.toLowerCase().contains(q);
+      if (!coincide) return false;
+      return switch (_filtro) {
+        'Materiales' => a.tipo == TipoArticulo.material,
+        'Herramientas' => a.tipo == TipoArticulo.herramienta,
+        'Bajo stock' => a.bajoStock,
+        'Agotados' => a.agotado,
+        _ => true,
+      };
+    }).toList();
 
-          // Botón Incrementar (+)
-          IconButton(
-            onPressed: valor < max
-                ? () {
-                    final nuevo = valor + 1;
-                    controller.text = nuevo.toString();
-                    onChanged(nuevo);
-                  }
-                : null,
-            icon: const Icon(Icons.add_circle_outline),
-            color: Colors.black87,
-            disabledColor: Colors.black12,
-            iconSize: 28,
-            tooltip: 'Aumentar 1',
+    int comparar(Articulo a, Articulo b) => switch (_ordenColumna) {
+          0 => a.id.compareTo(b.id),
+          1 => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()),
+          4 => a.existencia.compareTo(b.existencia),
+          6 => a.valorEnAlmacen.compareTo(b.valorEnAlmacen),
+          _ => 0,
+        };
+    lista.sort((a, b) => _ordenAscendente ? comparar(a, b) : comparar(b, a));
+    return lista;
+  }
+
+  Future<void> _editarArticulo(Articulo articulo) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => Scaffold(
+          backgroundColor: AppTheme.background,
+          appBar: AppBar(title: const Text('Editar artículo')),
+          body: ContenidoResponsivo(
+            anchoMaximo: 760,
+            child: FormularioArticulo(articulo: articulo, onGuardado: () => Navigator.pop(ctx)),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildQuickStepChip(String label, int add) {
-    return ActionChip(
-      label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-      backgroundColor: Colors.white,
-      side: BorderSide(color: Colors.grey.shade300),
-      onPressed: () {
-        setState(() {
-          _cantidadAlta += add;
-          _cantidadAltaController.text = _cantidadAlta.toString();
-        });
-      },
+  Future<void> _eliminarArticulo(Articulo articulo) async {
+    final confirmar = await ConfirmDialog.show(
+      context: context,
+      title: 'Eliminar artículo',
+      message: '¿Eliminar "${articulo.nombre}" del catálogo? Los vales ya registrados se conservan.',
+      confirmText: 'Sí, eliminar',
+      isDestructive: true,
+      icon: Icons.delete_outline,
     );
+    if (!confirmar || !mounted) return;
+    final error = await _almacen.eliminarArticulo(articulo);
+    if (!mounted) return;
+    _mensaje(error ?? '"${articulo.nombre}" eliminado.', error: error != null);
   }
 
-  Widget _buildQuickPriceChip(String label, double add) {
-    return ActionChip(
-      label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-      backgroundColor: Colors.white,
-      side: BorderSide(color: Colors.grey.shade300),
-      onPressed: () {
-        setState(() {
-          _costoAlta += add;
-          _costoAltaController.text = _costoAlta.toStringAsFixed(2);
-        });
-      },
-    );
-  }
-
-  // ================================================================
-  // PESTAÑA 2: DATAGRID DE INVENTARIO (ESTILO WINDOWS FORMS ADAPTADO)
-  // ================================================================
-  Widget _buildDataGridInventario() {
-    final piezas = _piezasFiltradas;
-    final int totalPiezas = _inventario.length;
-    final int stockTotal = _inventario.fold(0, (acc, item) => acc + (item['cantidad'] as int));
-    final int bajoStock = _inventario.where((item) => (item['cantidad'] as int) > 0 && (item['cantidad'] as int) < 5).length;
-    final int agotados = _inventario.where((item) => (item['cantidad'] as int) == 0).length;
+  Widget _buildDesglose() {
+    final todos = _almacen.articulos;
+    final filtrados = _articulosFiltrados;
+    final double valorTotal = todos.fold(0.0, (s, a) => s + a.valorEnAlmacen);
+    final int prestadas = _almacen.valesHerramienta.where((v) => !v.devuelto).length;
 
     return Column(
       children: [
-        // ----------------------------------------------------
-        // TARJETAS DE RESUMEN EJECUTIVO (KPIs)
-        // ----------------------------------------------------
         Padding(
-          padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildKpiCard('Total Ítems', '$totalPiezas', Icons.inventory_2_outlined, Colors.black87),
-                const SizedBox(width: 10),
-                _buildKpiCard('Unidades Stock', '$stockTotal', Icons.all_inbox, Colors.blueGrey),
-                const SizedBox(width: 10),
-                _buildKpiCard('Stock Bajo (<5)', '$bajoStock', Icons.warning_amber_rounded, Colors.orange),
-                const SizedBox(width: 10),
-                _buildKpiCard('Agotados', '$agotados', Icons.highlight_off, Colors.redAccent),
+                _kpi('Artículos', '${todos.length}', Icons.inventory_2_outlined, Colors.black87),
+                _kpi('Valor en almacén', formatearDinero(valorTotal), Icons.payments_outlined, Colors.blueGrey),
+                _kpi('Bajo stock (<5)', '${todos.where((a) => a.bajoStock).length}', Icons.warning_amber_rounded, Colors.orange),
+                _kpi('Agotados', '${todos.where((a) => a.agotado).length}', Icons.highlight_off, Colors.redAccent),
+                _kpi('Herramientas prestadas', '$prestadas', Icons.handyman_outlined, AppTheme.info),
               ],
             ),
           ),
         ),
-
-        // ----------------------------------------------------
-        // BARRA DE BÚSQUEDA Y CONTROL DE VISTA
-        // ----------------------------------------------------
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Column(
             children: [
               Row(
                 children: [
                   Expanded(
                     child: TextField(
-                      controller: _searchGridController,
-                      onChanged: (val) {
-                        setState(() => _searchQuery = val);
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Buscar por código, nombre, categoría...',
-                        hintStyle: const TextStyle(fontSize: 13, color: Colors.black38),
-                        prefixIcon: const Icon(Icons.search, size: 20, color: Colors.black54),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  _searchGridController.clear();
-                                  setState(() => _searchQuery = '');
-                                },
-                              )
-                            : null,
-                        filled: true,
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                      ),
+                      controller: _searchController,
+                      onChanged: (v) => setState(() => _searchQuery = v),
+                      decoration: AppTheme.inputDecoration('Buscar por código, nombre o categoría...', icon: Icons.search),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Botón para alternar entre DataGrid y Tarjetas
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: IconButton(
-                      icon: Icon(_isTableView ? Icons.grid_view : Icons.table_chart, color: Colors.black87),
-                      tooltip: _isTableView ? 'Ver en modo tarjetas' : 'Ver en modo DataGrid',
-                      onPressed: () {
-                        setState(() => _isTableView = !_isTableView);
-                      },
-                    ),
+                  IconButton.outlined(
+                    icon: Icon(_vistaTabla ? Icons.grid_view : Icons.table_chart_outlined),
+                    tooltip: _vistaTabla ? 'Ver como tarjetas' : 'Ver como tabla',
+                    onPressed: () => setState(() => _vistaTabla = !_vistaTabla),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-
-              // Chips de filtro por estado
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildFilterStatusChip('Todos'),
-                    const SizedBox(width: 6),
-                    _buildFilterStatusChip('En Stock'),
-                    const SizedBox(width: 6),
-                    _buildFilterStatusChip('Bajo Stock'),
-                    const SizedBox(width: 6),
-                    _buildFilterStatusChip('Agotado'),
-                  ],
+              SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [for (final f in ['Todos', 'Materiales', 'Herramientas', 'Bajo stock', 'Agotados']) _chipFiltro(f)],
                 ),
               ),
             ],
           ),
         ),
-
-        // ----------------------------------------------------
-        // CONTENEDOR PRINCIPAL: DATAGRID O TARJETAS
-        // ----------------------------------------------------
         Expanded(
-          child: piezas.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.search_off, size: 54, color: Colors.grey.shade400),
-                      const SizedBox(height: 12),
-                      const Text('No se encontraron piezas con ese criterio.', style: TextStyle(color: Colors.black54)),
-                    ],
-                  ),
-                )
-              : _isTableView
-                  ? _buildDataGridTable(piezas)
-                  : _buildCardsView(piezas),
+          child: filtrados.isEmpty
+              ? const Center(child: Text('No hay artículos con ese criterio.', style: TextStyle(color: AppTheme.textSecondary)))
+              : (_vistaTabla ? _buildTabla(filtrados) : _buildTarjetasArticulos(filtrados)),
         ),
       ],
     );
   }
 
-  // Render del DataGrid tipo Windows Forms con scroll horizontal seguro
-  Widget _buildDataGridTable(List<Map<String, dynamic>> piezas) {
+  Widget _kpi(String titulo, String valor, IconData icono, Color color) {
     return Container(
-      margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 15, offset: const Offset(0, 8))],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          // Barra de cabecera del DataGrid (Inspirado en WinForms DataGridView)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: const Color(0xFF1E1E24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.table_rows, color: Colors.white70, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Desglose de inventario (${piezas.length} registros)',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Text('Desliza ➔', style: TextStyle(color: Colors.white54, fontSize: 11)),
-              ],
-            ),
-          ),
-
-          // Scroll Horizontal para acomodar todas las columnas en móviles y tablets
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.vertical,
-                physics: const BouncingScrollPhysics(),
-                child: DataTable(
-                  sortColumnIndex: _sortColumnIndex,
-                  sortAscending: _sortAscending,
-                  headingRowColor: WidgetStateProperty.all(const Color(0xFFF1F2F4)),
-                  dataRowMinHeight: 52,
-                  dataRowMaxHeight: 58,
-                  horizontalMargin: 16,
-                  columnSpacing: 22,
-                  headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 13),
-                  columns: [
-                    DataColumn(
-                      label: const Text('Código'),
-                      onSort: _onSort,
-                    ),
-                    DataColumn(
-                      label: const Text('Pieza / Refacción'),
-                      onSort: _onSort,
-                    ),
-                    DataColumn(
-                      label: const Text('Categoría'),
-                      onSort: _onSort,
-                    ),
-                    DataColumn(
-                      numeric: true,
-                      label: const Text('Stock'),
-                      onSort: _onSort,
-                    ),
-                    DataColumn(
-                      numeric: true,
-                      label: const Text('Costo Unit.'),
-                      onSort: _onSort,
-                    ),
-                    DataColumn(
-                      numeric: true,
-                      label: const Text('Total Val.'),
-                      onSort: _onSort,
-                    ),
-                    const DataColumn(
-                      label: Text('Ubicación'),
-                    ),
-                    const DataColumn(
-                      label: Text('Estado'),
-                    ),
-                    const DataColumn(
-                      label: Text('Acción'),
-                    ),
-                  ],
-                  rows: piezas.map((item) {
-                    final int stock = item['cantidad'] as int;
-                    final double costo = item['costo'] as double;
-                    final double total = stock * costo;
-
-                    Color estadoColor;
-                    String estadoTexto;
-                    if (stock == 0) {
-                      estadoColor = Colors.red;
-                      estadoTexto = 'Agotado';
-                    } else if (stock < 5) {
-                      estadoColor = Colors.orange;
-                      estadoTexto = 'Stock Bajo';
-                    } else {
-                      estadoColor = Colors.green;
-                      estadoTexto = 'En Stock';
-                    }
-
-                    return DataRow(
-                      cells: [
-                        // 1. Código
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
-                            child: Text(item['id'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                          ),
-                        ),
-                        // 2. Nombre
-                        DataCell(
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 220),
-                            child: Text(item['nombre'], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                          ),
-                        ),
-                        // 3. Categoría
-                        DataCell(Text(item['categoria'], style: const TextStyle(color: Colors.black54, fontSize: 13))),
-                        // 4. Stock
-                        DataCell(
-                          Text(
-                            '$stock und.',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: stock == 0 ? Colors.red : (stock < 5 ? Colors.orange.shade800 : Colors.black87),
-                            ),
-                          ),
-                        ),
-                        // 5. Costo
-                        DataCell(Text('\$ ${costo.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13))),
-                        // 6. Total Valorado
-                        DataCell(Text('\$ ${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                        // 7. Ubicación
-                        DataCell(Text(item['ubicacion'], style: const TextStyle(color: Colors.black54, fontSize: 12))),
-                        // 8. Estado / Badge
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: estadoColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: estadoColor.withValues(alpha: 0.4)),
-                            ),
-                            child: Text(
-                              estadoTexto,
-                              style: TextStyle(color: estadoColor, fontWeight: FontWeight.bold, fontSize: 11),
-                            ),
-                          ),
-                        ),
-                        // 9. Acción rápida (Ajustar Stock)
-                        DataCell(
-                          IconButton(
-                            icon: const Icon(Icons.edit_note, size: 22, color: Colors.black87),
-                            tooltip: 'Ajustar stock',
-                            onPressed: () => _mostrarDialogoAjustarStock(item),
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Vista alternativa en tarjetas (útil para móviles de una mano)
-  Widget _buildCardsView(List<Map<String, dynamic>> piezas) {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: piezas.length,
-      itemBuilder: (context, index) {
-        final item = piezas[index];
-        final int stock = item['cantidad'] as int;
-        final double costo = item['costo'] as double;
-        final bool pocoStock = stock > 0 && stock < 5;
-        final bool agotado = stock == 0;
-
-        return Card(
-          elevation: 0,
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          color: Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: agotado
-                        ? Colors.red.shade50
-                        : (pocoStock ? Colors.orange.shade50 : Colors.grey.shade100),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.inventory_2,
-                    color: agotado ? Colors.red : (pocoStock ? Colors.orange : Colors.black87),
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
-                            child: Text(item['id'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                          ),
-                          Text(
-                            item['categoria'],
-                            style: const TextStyle(color: Colors.black54, fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(item['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      const SizedBox(height: 4),
-                      Text('Ubicación: ${item['ubicacion']}', style: const TextStyle(color: Colors.black54, fontSize: 12)),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Unit: \$ ${costo.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
-                          Row(
-                            children: [
-                              Text(
-                                '$stock uds.',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
-                                  color: agotado ? Colors.red : (pocoStock ? Colors.orange.shade800 : Colors.black),
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.tune, size: 18),
-                                onPressed: () => _mostrarDialogoAjustarStock(item),
-                                tooltip: 'Ajustar stock',
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildKpiCard(String titulo, String valor, IconData icono, Color color) {
-    return Container(
+      margin: const EdgeInsets.only(right: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 3))],
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: AppTheme.cardShadow),
       child: Row(
         children: [
           Icon(icono, color: color, size: 20),
@@ -1193,7 +256,7 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(titulo, style: const TextStyle(color: Colors.black54, fontSize: 10, fontWeight: FontWeight.w600)),
+              Text(titulo, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.w600)),
               Text(valor, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
@@ -1202,229 +265,756 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildFilterStatusChip(String estado) {
-    final bool seleccionado = _filtroEstado == estado;
+  Widget _chipFiltro(String etiqueta) {
+    final sel = _filtro == etiqueta;
     return ChoiceChip(
-      label: Text(estado, style: TextStyle(fontSize: 12, fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal)),
-      selected: seleccionado,
-      selectedColor: Colors.black,
-      labelStyle: TextStyle(color: seleccionado ? Colors.white : Colors.black87),
+      label: Text(etiqueta, style: TextStyle(fontSize: 12, fontWeight: sel ? FontWeight.bold : FontWeight.normal)),
+      selected: sel,
+      showCheckmark: false,
+      selectedColor: AppTheme.primary,
+      labelStyle: TextStyle(color: sel ? Colors.white : AppTheme.textPrimary),
       backgroundColor: Colors.white,
-      side: BorderSide(color: seleccionado ? Colors.black : Colors.grey.shade300),
-      onSelected: (val) {
-        if (val) setState(() => _filtroEstado = estado);
+      side: BorderSide(color: sel ? AppTheme.primary : AppTheme.border),
+      onSelected: (v) {
+        if (v) setState(() => _filtro = etiqueta);
       },
     );
   }
 
-  // ================================================================
-  // PESTAÑA 3: VALES DE SALIDA (EXTRACCIÓN PROTEGIDA)
-  // ================================================================
-  Widget _buildValeSalida(BuildContext context) {
-    final Map<String, dynamic> piezaElegida = _inventario.firstWhere(
-      (item) => item['nombre'] == _piezaValeSeleccionada,
-      orElse: () => _inventario.first,
-    );
-    final int stockDisponible = piezaElegida['cantidad'] as int;
+  ({String texto, BadgeType tipo}) _estado(Articulo a) {
+    if (a.agotado) return (texto: 'AGOTADO', tipo: BadgeType.danger);
+    if (a.bajoStock) return (texto: 'BAJO STOCK', tipo: BadgeType.warning);
+    return (texto: 'EN STOCK', tipo: BadgeType.success);
+  }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20.0),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 15, offset: const Offset(0, 8))],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.1), shape: BoxShape.circle),
-                  child: const Icon(Icons.outbox_rounded, color: Colors.blueAccent, size: 24),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Vale de Salida de Almacén', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      Text('Control seguro de extracción y asignación a proyecto', style: TextStyle(color: Colors.black54, fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Divider(height: 1),
-            ),
+  void _ordenar(int columna, bool ascendente) => setState(() {
+        _ordenColumna = columna;
+        _ordenAscendente = ascendente;
+      });
 
-            // Selector de Pieza del Inventario
-            _buildEtiqueta('Seleccionar Pieza del Inventario'),
-            DropdownButtonFormField<String>(
-              initialValue: _piezaValeSeleccionada,
-              isExpanded: true,
-              decoration: _buildInputDecoration('Pieza a extraer', icon: Icons.inventory_2_outlined),
-              items: _inventario.map((item) {
-                final int stock = item['cantidad'] as int;
-                return DropdownMenuItem<String>(
-                  value: item['nombre'] as String,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${item['id']} - ${item['nombre']}',
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                      Text(
-                        '($stock disp.)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: stock == 0 ? Colors.red : Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: (val) {
-                if (val != null) {
-                  setState(() {
-                    _piezaValeSeleccionada = val;
-                    if (_cantidadVale > stockDisponible && stockDisponible > 0) {
-                      _cantidadVale = stockDisponible;
-                      _cantidadValeController.text = _cantidadVale.toString();
-                    }
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: 18),
-
-            // Stepper protegido de extracción con tope de stock
-            _buildEtiqueta('Cantidad a Extraer (Stock disponible: $stockDisponible)'),
-            _buildStepperNumerico(
-              valor: _cantidadVale,
-              controller: _cantidadValeController,
-              min: stockDisponible > 0 ? 1 : 0,
-              max: stockDisponible > 0 ? stockDisponible : 0,
-              onChanged: (nuevo) {
-                setState(() {
-                  _cantidadVale = nuevo;
-                });
-              },
-            ),
-            if (stockDisponible == 0) ...[
-              const SizedBox(height: 6),
-              const Text('⚠️ Esta pieza no tiene existencias para extraer.', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+  Widget _buildTabla(List<Articulo> lista) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SingleChildScrollView(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            sortColumnIndex: _ordenColumna,
+            sortAscending: _ordenAscendente,
+            headingRowColor: WidgetStateProperty.all(const Color(0xFFF4F4F5)),
+            headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.textPrimary),
+            columnSpacing: 22,
+            columns: [
+              DataColumn(label: const Text('Código'), onSort: _ordenar),
+              DataColumn(label: const Text('Artículo'), onSort: _ordenar),
+              const DataColumn(label: Text('Tipo')),
+              const DataColumn(label: Text('Categoría')),
+              DataColumn(label: const Text('Existencia'), numeric: true, onSort: _ordenar),
+              const DataColumn(label: Text('Costo unit.'), numeric: true),
+              DataColumn(label: const Text('Valor'), numeric: true, onSort: _ordenar),
+              const DataColumn(label: Text('Estado')),
+              const DataColumn(label: Text('Acciones')),
             ],
-            const SizedBox(height: 18),
-
-            // Proyecto Destino
-            _buildEtiqueta('Proyecto / Camión Destino'),
-            TextFormField(
-              controller: _proyectoDestinoController,
-              decoration: _buildInputDecoration('Ej. Camión 01 - Volvo 2019', icon: Icons.local_shipping_outlined),
-            ),
-            const SizedBox(height: 18),
-
-            // Horas de extracción y devolución
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildEtiqueta('Hora Extracción'),
-                      TextField(
-                        controller: _horaExtraccionController,
-                        readOnly: true,
-                        onTap: () => _seleccionarHora(context, _horaExtraccionController),
-                        decoration: _buildInputDecoration('--:--', icon: Icons.access_time),
-                      ),
-                    ],
-                  ),
+            rows: [
+              for (final a in lista)
+                DataRow(
+                  cells: [
+                    DataCell(Text(a.id, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                    DataCell(ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 220),
+                      child: Text(a.nombre, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    )),
+                    DataCell(Text(a.tipo.corto, style: const TextStyle(fontSize: 12))),
+                    DataCell(Text(a.categoria, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12))),
+                    DataCell(Text(a.unidad.formatear(a.existencia), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                    DataCell(Text('${formatearDinero(a.costoUnitario)} / ${a.unidad.abreviatura}', style: const TextStyle(fontSize: 12))),
+                    DataCell(Text(formatearDinero(a.valorEnAlmacen), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                    DataCell(StatusBadge(label: _estado(a).texto, type: _estado(a).tipo)),
+                    DataCell(Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(icon: const Icon(Icons.edit_outlined, size: 18), tooltip: 'Editar', onPressed: () => _editarArticulo(a)),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.danger),
+                          tooltip: 'Eliminar',
+                          onPressed: () => _eliminarArticulo(a),
+                        ),
+                      ],
+                    )),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildEtiqueta('Hora Devolución (Opc.)'),
-                      TextField(
-                        controller: _horaDevolucionController,
-                        readOnly: true,
-                        onTap: () => _seleccionarHora(context, _horaDevolucionController),
-                        decoration: _buildInputDecoration('--:--', icon: Icons.access_time),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // Botón Generar Vale
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: stockDisponible == 0
-                    ? null
-                    : () {
-                        setState(() {
-                          piezaElegida['cantidad'] = (piezaElegida['cantidad'] as int) - _cantidadVale;
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Vale generado. Se descontaron $_cantidadVale uds. de ${piezaElegida['nombre']}.'),
-                            backgroundColor: Colors.blueAccent,
-                          ),
-                        );
-                      },
-                icon: const Icon(Icons.print_outlined, color: Colors.white),
-                label: const Text('Generar Vale Digital', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  disabledBackgroundColor: Colors.grey.shade300,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 0,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // Funciones auxiliares de estilo
-  Widget _buildEtiqueta(String texto) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Text(texto, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black87)),
+  Widget _buildTarjetasArticulos(List<Articulo> lista) {
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      itemCount: lista.length,
+      itemBuilder: (context, i) {
+        final a = lista[i];
+        final estado = _estado(a);
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: AppTheme.border)),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: const BoxDecoration(color: Color(0xFFF1F2F4), shape: BoxShape.circle),
+                child: Icon(a.tipo == TipoArticulo.material ? Icons.inventory_2_outlined : Icons.handyman_outlined, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(a.nombre, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text('${a.id} • ${a.categoria} • ${a.tipo.corto}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(a.unidad.formatear(a.existencia), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text('${formatearDinero(a.costoUnitario)} / ${a.unidad.abreviatura}', style: const TextStyle(fontSize: 12)),
+                        StatusBadge(label: estado.texto, type: estado.tipo),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(icon: const Icon(Icons.edit_outlined, size: 20), tooltip: 'Editar', onPressed: () => _editarArticulo(a)),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+                tooltip: 'Eliminar',
+                onPressed: () => _eliminarArticulo(a),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  InputDecoration _buildInputDecoration(String hint, {IconData? icon}) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: Colors.black26, fontSize: 13),
-      prefixIcon: icon != null ? Icon(icon, size: 20, color: Colors.black54) : null,
-      filled: true,
-      fillColor: Colors.grey.shade50,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade200)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade200)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Colors.black, width: 1.5)),
+  // =====================================================================
+  // VALES (comunes)
+  // =====================================================================
+
+  String _etiquetaProyecto(ProyectoTaller p) => '${p.id} • ${p.nombreCamion} (${p.placa})';
+
+  Widget _selectorProyecto({required String? valor, required ValueChanged<String?> onChanged}) {
+    final proyectos = _proyectos.activos;
+    final valido = proyectos.any((p) => p.id == valor) ? valor : null;
+    return DropdownButtonFormField<String>(
+      key: ValueKey('proyecto-$valido-${proyectos.length}'),
+      initialValue: valido,
+      isExpanded: true,
+      decoration: AppTheme.inputDecoration(proyectos.isEmpty ? 'No hay proyectos activos' : 'Selecciona el proyecto', icon: Icons.local_shipping_outlined),
+      items: [
+        for (final p in proyectos) DropdownMenuItem(value: p.id, child: Text(_etiquetaProyecto(p), overflow: TextOverflow.ellipsis)),
+      ],
+      validator: (v) => v == null ? 'Elige el proyecto' : null,
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _selectorArticulo({
+    required TipoArticulo tipo,
+    required String? valor,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final opciones = _almacen.articulos.where((a) => a.tipo == tipo && !a.agotado).toList()
+      ..sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
+    final valido = opciones.any((a) => a.id == valor) ? valor : null;
+    return DropdownButtonFormField<String>(
+      key: ValueKey('articulo-${tipo.name}-$valido-${opciones.length}'),
+      initialValue: valido,
+      isExpanded: true,
+      decoration: AppTheme.inputDecoration(
+        opciones.isEmpty ? 'No hay ${tipo == TipoArticulo.material ? 'materiales' : 'herramientas'} disponibles' : 'Selecciona',
+        icon: tipo == TipoArticulo.material ? Icons.inventory_2_outlined : Icons.handyman_outlined,
+      ),
+      items: [
+        for (final a in opciones)
+          DropdownMenuItem(
+            value: a.id,
+            child: Text('${a.nombre} — disponible: ${a.unidad.formatear(a.existencia)}', overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      validator: (v) => v == null ? 'Elige el artículo' : null,
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _campoCantidad({required TextEditingController controller, required Articulo? articulo}) {
+    final unidad = articulo?.unidad ?? UnidadMedida.pieza;
+    return TextFormField(
+      key: ValueKey('cantidad-${articulo?.id}'),
+      controller: controller,
+      keyboardType: TextInputType.numberWithOptions(decimal: unidad.permiteDecimales),
+      inputFormatters: formateadoresCantidad(unidad),
+      onChanged: (_) => setState(() {}),
+      validator: (v) {
+        final n = double.tryParse(v ?? '');
+        if (n == null || n <= 0) return 'Ingresa una cantidad mayor a 0';
+        if (articulo != null && n > articulo.existencia) return 'Solo hay ${articulo.unidad.formatear(articulo.existencia)}';
+        return null;
+      },
+      decoration: AppTheme.inputDecoration(unidad.permiteDecimales ? 'Ej. 2.5' : 'Ej. 2', icon: Icons.scale_outlined)
+          .copyWith(suffixText: unidad.abreviatura),
+    );
+  }
+
+  Widget _tarjetaFormulario({required String titulo, required String subtitulo, required IconData icono, required List<Widget> children}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppTheme.border),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: AppTheme.primary, borderRadius: BorderRadius.circular(12)),
+                child: Icon(icono, color: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                    Text(subtitulo, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _etiqueta(String texto) => Padding(
+        padding: const EdgeInsets.only(bottom: 6, top: 12),
+        child: Text(texto, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.textPrimary)),
+      );
+
+  Widget _botonPrincipal({required String texto, required IconData icono, required VoidCallback? onPressed}) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icono, color: Colors.white),
+        label: Text(texto, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.primary,
+          disabledBackgroundColor: Colors.grey.shade400,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          elevation: 0,
+        ),
+      ),
+    );
+  }
+
+  Widget _tituloLista(String texto, String contador) => Padding(
+        padding: const EdgeInsets.only(top: 24, bottom: 10),
+        child: Row(
+          children: [
+            Expanded(child: Text(texto, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+            Text(contador, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+
+  // =====================================================================
+  // VALES DE MATERIAL (se consume)
+  // =====================================================================
+
+  Future<void> _generarValeMaterial() async {
+    if (!_formMaterial.currentState!.validate()) return;
+    final proyecto = _proyectos.activos.firstWhere((p) => p.id == _proyectoMaterial);
+    final articulo = _almacen.articuloPorId(_articuloMaterial!)!;
+    final cantidad = double.parse(_cantidadMaterial.text);
+    final costoEstimado = cantidad * articulo.costoUnitario;
+    final error = await _almacen.registrarValeMaterial(
+      proyectoId: proyecto.id,
+      proyectoNombre: '${proyecto.nombreCamion} (${proyecto.placa})',
+      articulo: articulo,
+      cantidad: cantidad,
+      entregadoA: _entregadoMaterial.text,
+    );
+    if (!mounted) return;
+    if (error != null) {
+      _mensaje(error, error: true);
+      return;
+    }
+    _mensaje('Vale generado: ${articulo.unidad.formatear(cantidad)} de ${articulo.nombre} → ${proyecto.nombreCamion} '
+        '(${formatearDinero(costoEstimado)}).');
+    setState(() {
+      _cantidadMaterial.clear();
+      _articuloMaterial = null;
+    });
+  }
+
+  Future<void> _cancelarValeMaterial(ValeMaterial vale) async {
+    final confirmar = await ConfirmDialog.show(
+      context: context,
+      title: 'Cancelar vale de material',
+      message: '${vale.unidad.formatear(vale.cantidad)} de "${vale.articuloNombre}" regresarán al almacén y '
+          '${formatearDinero(vale.total)} dejarán de contar en el proyecto.',
+      confirmText: 'Sí, cancelar vale',
+      isDestructive: true,
+      icon: Icons.undo,
+    );
+    if (!confirmar) return;
+    final error = await _almacen.cancelarValeMaterial(vale);
+    if (!mounted) return;
+    _mensaje(error ?? 'Vale ${vale.id} cancelado. El material regresó al almacén.', error: error != null);
+  }
+
+  Widget _buildValesMaterial() {
+    final articulo = _articuloMaterial == null ? null : _almacen.articuloPorId(_articuloMaterial!);
+    final cantidad = double.tryParse(_cantidadMaterial.text) ?? 0;
+    final vales = _almacen.valesMaterial;
+
+    return ContenidoResponsivo(
+      anchoMaximo: 760,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Form(
+            key: _formMaterial,
+            child: _tarjetaFormulario(
+              titulo: 'Vale de salida de material',
+              subtitulo: 'El material se consume y su costo se carga al proyecto.',
+              icono: Icons.inventory_2_outlined,
+              children: [
+                _etiqueta('Proyecto destino *'),
+                _selectorProyecto(valor: _proyectoMaterial, onChanged: (v) => setState(() => _proyectoMaterial = v)),
+                _etiqueta('Material *'),
+                _selectorArticulo(
+                  tipo: TipoArticulo.material,
+                  valor: _articuloMaterial,
+                  onChanged: (v) => setState(() {
+                    _articuloMaterial = v;
+                    _cantidadMaterial.clear();
+                  }),
+                ),
+                _etiqueta('Cantidad *'),
+                _campoCantidad(controller: _cantidadMaterial, articulo: articulo),
+                _etiqueta('Entregado a'),
+                TextFormField(
+                  controller: _entregadoMaterial,
+                  decoration: AppTheme.inputDecoration('Nombre de quien recibe (opcional)', icon: Icons.person_outline),
+                ),
+                if (articulo != null && cantidad > 0) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Costo a cargar al proyecto: ${formatearDinero(cantidad * articulo.costoUnitario)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                _botonPrincipal(texto: 'Generar vale de material', icono: Icons.receipt_long, onPressed: _generarValeMaterial),
+              ],
+            ),
+          ),
+          _tituloLista('Vales de material registrados', '${vales.length}'),
+          if (vales.isEmpty)
+            const Text('Aún no hay vales de material.', style: TextStyle(color: AppTheme.textSecondary))
+          else
+            for (final v in vales)
+              _filaVale(
+                icono: Icons.inventory_2_outlined,
+                titulo: '${v.unidad.formatear(v.cantidad)} • ${v.articuloNombre}',
+                detalle: '${v.id} • ${v.proyectoNombre}\n${formatearFechaHora(v.fecha)}${v.entregadoA.isEmpty ? '' : ' • Recibió: ${v.entregadoA}'}',
+                extra: Text(formatearDinero(v.total), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+                acciones: [
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+                    tooltip: 'Cancelar vale (regresa el material)',
+                    onPressed: () => _cancelarValeMaterial(v),
+                  ),
+                ],
+              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _filaVale({required IconData icono, required String titulo, required String detalle, Widget? extra, List<Widget> acciones = const []}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppTheme.border)),
+      child: Row(
+        children: [
+          Icon(icono, color: AppTheme.textSecondary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(titulo, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(detalle, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                if (extra != null) ...[const SizedBox(height: 4), extra],
+              ],
+            ),
+          ),
+          ...acciones,
+        ],
+      ),
+    );
+  }
+
+  // =====================================================================
+  // HERRAMIENTAS (deben volver)
+  // =====================================================================
+
+  Future<void> _prestarHerramienta() async {
+    if (!_formHerramienta.currentState!.validate()) return;
+    final proyecto = _proyectos.activos.firstWhere((p) => p.id == _proyectoHerramienta);
+    final articulo = _almacen.articuloPorId(_articuloHerramienta!)!;
+    final cantidad = double.parse(_cantidadHerramienta.text);
+    final error = await _almacen.prestarHerramienta(
+      proyectoId: proyecto.id,
+      proyectoNombre: '${proyecto.nombreCamion} (${proyecto.placa})',
+      articulo: articulo,
+      cantidad: cantidad,
+      entregadoA: _entregadoHerramienta.text,
+    );
+    if (!mounted) return;
+    if (error != null) {
+      _mensaje(error, error: true);
+      return;
+    }
+    _mensaje('Préstamo registrado: ${articulo.unidad.formatear(cantidad)} de ${articulo.nombre}. Debe regresar al almacén.');
+    setState(() {
+      _cantidadHerramienta.text = '1';
+      _articuloHerramienta = null;
+    });
+  }
+
+  Future<void> _registrarDevolucion(ValeHerramienta vale) async {
+    final estado = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text('Devolución: ${vale.articuloNombre}'),
+        children: [
+          for (final opcion in ['Buen estado', 'Con daño', 'Incompleta'])
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, opcion),
+              child: Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(opcion, style: const TextStyle(fontSize: 15))),
+            ),
+        ],
+      ),
+    );
+    if (estado == null) return;
+    final error = await _almacen.registrarDevolucion(vale, estado);
+    if (!mounted) return;
+    _mensaje(error ?? 'Devolución registrada (${estado.toLowerCase()}).', error: error != null);
+  }
+
+  Future<void> _eliminarValeHerramienta(ValeHerramienta vale) async {
+    final confirmar = await ConfirmDialog.show(
+      context: context,
+      title: 'Eliminar vale',
+      message: vale.devuelto
+          ? '¿Eliminar el registro ${vale.id} del historial?'
+          : 'La herramienta se dará por regresada al almacén y se eliminará el vale ${vale.id}.',
+      confirmText: 'Sí, eliminar',
+      isDestructive: true,
+      icon: Icons.delete_outline,
+    );
+    if (!confirmar) return;
+    final error = await _almacen.eliminarValeHerramienta(vale);
+    if (!mounted) return;
+    _mensaje(error ?? 'Vale ${vale.id} eliminado.', error: error != null);
+  }
+
+  Widget _buildHerramientas() {
+    final articulo = _articuloHerramienta == null ? null : _almacen.articuloPorId(_articuloHerramienta!);
+    final prestadas = _almacen.valesHerramienta.where((v) => !v.devuelto).toList();
+    final devueltas = _almacen.valesHerramienta.where((v) => v.devuelto).toList();
+
+    return ContenidoResponsivo(
+      anchoMaximo: 760,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Form(
+            key: _formHerramienta,
+            child: _tarjetaFormulario(
+              titulo: 'Vale de herramienta',
+              subtitulo: 'La herramienta se presta al proyecto y DEBE regresar al almacén.',
+              icono: Icons.handyman_outlined,
+              children: [
+                _etiqueta('Proyecto *'),
+                _selectorProyecto(valor: _proyectoHerramienta, onChanged: (v) => setState(() => _proyectoHerramienta = v)),
+                _etiqueta('Herramienta *'),
+                _selectorArticulo(
+                  tipo: TipoArticulo.herramienta,
+                  valor: _articuloHerramienta,
+                  onChanged: (v) => setState(() {
+                    _articuloHerramienta = v;
+                    _cantidadHerramienta.text = '1';
+                  }),
+                ),
+                _etiqueta('Cantidad *'),
+                _campoCantidad(controller: _cantidadHerramienta, articulo: articulo),
+                _etiqueta('Responsable que la recibe *'),
+                TextFormField(
+                  controller: _entregadoHerramienta,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Indica quién se hace responsable' : null,
+                  decoration: AppTheme.inputDecoration('Nombre del mecánico o responsable', icon: Icons.engineering_outlined),
+                ),
+                const SizedBox(height: 18),
+                _botonPrincipal(texto: 'Registrar préstamo', icono: Icons.outbox_outlined, onPressed: _prestarHerramienta),
+              ],
+            ),
+          ),
+          _tituloLista('Prestadas — pendientes de volver', '${prestadas.length}'),
+          if (prestadas.isEmpty)
+            const Text('No hay herramientas prestadas.', style: TextStyle(color: AppTheme.textSecondary))
+          else
+            for (final v in prestadas)
+              _filaVale(
+                icono: Icons.handyman_outlined,
+                titulo: '${v.unidad.formatear(v.cantidad)} • ${v.articuloNombre}',
+                detalle: '${v.id} • ${v.proyectoNombre}\nSalió ${formatearFechaHora(v.fechaSalida)} • Responsable: ${v.entregadoA}',
+                extra: const StatusBadge(label: 'DEBE VOLVER', type: BadgeType.warning),
+                acciones: [
+                  IconButton(
+                    icon: const Icon(Icons.assignment_return_outlined, size: 20, color: AppTheme.success),
+                    tooltip: 'Registrar devolución',
+                    onPressed: () => _registrarDevolucion(v),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+                    tooltip: 'Eliminar vale',
+                    onPressed: () => _eliminarValeHerramienta(v),
+                  ),
+                ],
+              ),
+          _tituloLista('Historial de devoluciones', '${devueltas.length}'),
+          if (devueltas.isEmpty)
+            const Text('Sin devoluciones registradas.', style: TextStyle(color: AppTheme.textSecondary))
+          else
+            for (final v in devueltas)
+              _filaVale(
+                icono: Icons.assignment_turned_in_outlined,
+                titulo: '${v.unidad.formatear(v.cantidad)} • ${v.articuloNombre}',
+                detalle: '${v.id} • ${v.proyectoNombre}\nVolvió ${formatearFechaHora(v.fechaDevolucion!)} • ${v.estadoDevolucion}',
+                acciones: [
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+                    tooltip: 'Eliminar del historial',
+                    onPressed: () => _eliminarValeHerramienta(v),
+                  ),
+                ],
+              ),
+        ],
+      ),
+    );
+  }
+
+  // =====================================================================
+  // ENTREGA DE PLACAS / RESGUARDOS
+  // =====================================================================
+
+  String _busquedaResguardo = '';
+
+  Future<void> _registrarSalida(RegistroResguardo r) async {
+    final quien = TextEditingController();
+    final notas = TextEditingController();
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Salida de almacén: ${r.empresa} ${r.numeroUnidad}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Se entrega: ${r.objetos}', style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(controller: quien, autofocus: true, decoration: AppTheme.inputDecoration('¿A quién se le entrega?', icon: Icons.person_outline)),
+            const SizedBox(height: 10),
+            TextField(controller: notas, decoration: AppTheme.inputDecoration('Notas (opcional)')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Registrar salida')),
+        ],
+      ),
+    );
+    final nombre = quien.text;
+    final texto = notas.text;
+    quien.dispose();
+    notas.dispose();
+    if (confirmado != true) return;
+    final error = await _almacen.registrarSalidaResguardo(r, entregadoA: nombre, notas: texto);
+    if (!mounted) return;
+    _mensaje(error ?? 'Salida registrada.', error: error != null);
+  }
+
+  Future<void> _eliminarResguardo(RegistroResguardo r) async {
+    final confirmar = await ConfirmDialog.show(
+      context: context,
+      title: 'Eliminar registro',
+      message: '¿Eliminar el registro de ${r.empresa} ${r.numeroUnidad}?',
+      confirmText: 'Sí, eliminar',
+      isDestructive: true,
+      icon: Icons.delete_outline,
+    );
+    if (!confirmar) return;
+    final error = await _almacen.eliminarResguardo(r);
+    if (!mounted) return;
+    _mensaje(error ?? 'Registro eliminado.', error: error != null);
+  }
+
+  Widget _buildResguardos() {
+    final q = _busquedaResguardo.toLowerCase();
+    bool coincide(RegistroResguardo r) =>
+        q.isEmpty ||
+        r.empresa.toLowerCase().contains(q) ||
+        r.numeroUnidad.toLowerCase().contains(q) ||
+        r.tipoUnidad.toLowerCase().contains(q) ||
+        r.objetos.toLowerCase().contains(q) ||
+        r.operador.toLowerCase().contains(q);
+    final enAlmacen = _almacen.resguardos.where((r) => r.enAlmacen && coincide(r)).toList();
+    final entregados = _almacen.resguardos.where((r) => !r.enAlmacen && coincide(r)).toList();
+
+    return ContenidoResponsivo(
+      anchoMaximo: 900,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  onChanged: (v) => setState(() => _busquedaResguardo = v),
+                  decoration: AppTheme.inputDecoration('Buscar empresa, unidad, operador...', icon: Icons.search),
+                ),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton.icon(
+                onPressed: () => mostrarFormularioResguardo(context),
+                icon: const Icon(Icons.add, color: Colors.white),
+                label: const Text('Registrar entrega', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ],
+          ),
+          _tituloLista('En almacén', '${enAlmacen.length}'),
+          if (enAlmacen.isEmpty)
+            const Text('No hay placas ni piezas en resguardo.', style: TextStyle(color: AppTheme.textSecondary))
+          else
+            for (final r in enAlmacen) _tarjetaResguardo(r),
+          _tituloLista('Entregados (historial)', '${entregados.length}'),
+          if (entregados.isEmpty)
+            const Text('Sin salidas registradas.', style: TextStyle(color: AppTheme.textSecondary))
+          else
+            for (final r in entregados) _tarjetaResguardo(r),
+        ],
+      ),
+    );
+  }
+
+  Widget _tarjetaResguardo(RegistroResguardo r) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: r.enAlmacen ? AppTheme.border : const Color(0xFFF1F2F4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: const BoxDecoration(color: Color(0xFFF1F2F4), shape: BoxShape.circle),
+            child: Icon(r.enAlmacen ? Icons.inventory_outlined : Icons.assignment_turned_in_outlined, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${r.empresa} • ${r.tipoUnidad.isEmpty ? 'Unidad' : r.tipoUnidad} ${r.numeroUnidad}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(r.objetos, style: const TextStyle(fontSize: 13)),
+                const SizedBox(height: 4),
+                Text(
+                  'Ingresó ${formatearFecha(r.fechaIngreso)} • Entregó ${r.operador}'
+                  '${r.enAlmacen ? ' • ${r.diasEnAlmacen} días en almacén' : ''}',
+                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                ),
+                if (!r.enAlmacen)
+                  Text(
+                    'Salió ${formatearFecha(r.fechaSalida!)} • Se entregó a ${r.entregadoA}${(r.notasSalida ?? '').isNotEmpty ? ' • ${r.notasSalida}' : ''}',
+                    style: const TextStyle(color: AppTheme.success, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                if (r.firma != null) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    decoration: BoxDecoration(border: Border.all(color: AppTheme.border), borderRadius: BorderRadius.circular(8)),
+                    child: Image.memory(r.firma!, fit: BoxFit.contain),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Column(
+            children: [
+              if (r.enAlmacen)
+                IconButton(
+                  icon: const Icon(Icons.outbox_outlined, color: AppTheme.success),
+                  tooltip: 'Registrar salida de almacén',
+                  onPressed: () => _registrarSalida(r),
+                ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+                tooltip: 'Eliminar',
+                onPressed: () => _eliminarResguardo(r),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

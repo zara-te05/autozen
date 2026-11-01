@@ -1,9 +1,12 @@
 using Autozen.Api.DTOs;
 using Autozen.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Autozen.Api.Controllers;
 
+[AllowAnonymous]
 [ApiController]
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
@@ -15,29 +18,16 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
+    [EnableRateLimiting(Politicas.Login)]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequestDTO request)
     {
         var resultado = await _authService.LoginAsync(request);
         if (resultado == null)
         {
-            return Unauthorized(new { message = "Credenciales inválidas." });
+            return Problem(detail: "Credenciales inválidas.", statusCode: StatusCodes.Status401Unauthorized);
         }
 
         return Ok(resultado);
-    }
-
-    [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterUserRequestDto request)
-    {
-        try
-        {
-            var resultado = await _authService.RegisterAsync(request);
-            return Ok(resultado);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
     }
 }

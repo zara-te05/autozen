@@ -22,10 +22,9 @@ public class CompraController : ControllerBase
 
     /// <summary>
     /// Lista todas las órdenes de compra con cálculo de tiempos estimados de entrega y proveedor.
-    /// Exclusivo para el Administrador de Compras y Administración general.
+    /// Lectura para cualquier usuario autenticado (los jefes pueden consultar otros departamentos).
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = "Admin,Compras_Admin")]
     public async Task<IActionResult> GetAll()
     {
         var compras = await _compraService.GetAllOrdenesCompraAsync();
@@ -51,7 +50,7 @@ public class CompraController : ControllerBase
     {
         var compra = await _compraService.GetOrdenCompraByIdAsync(id);
         return compra == null
-            ? NotFound(new { message = $"La orden de compra #{id} no existe." })
+            ? Problem(detail: $"La orden de compra #{id} no existe.", statusCode: StatusCodes.Status404NotFound)
             : Ok(compra);
     }
 
@@ -81,7 +80,7 @@ public class CompraController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
         }
     }
 
@@ -89,6 +88,18 @@ public class CompraController : ControllerBase
     /// Registra formalmente una orden de compra en el sistema.
     /// Exclusivo para personal de Compras y Administración.
     /// </summary>
+    /// <summary>
+    /// Crea solicitud y orden de compra en un solo paso.
+    /// </summary>
+    [HttpPost("orden-directa")]
+    [Authorize(Roles = Edicion.Compras)]
+    public async Task<IActionResult> CrearOrdenDirecta([FromBody] CrearOrdenDirectaRequest dto)
+    {
+        var valor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        var orden = await _compraService.CrearOrdenDirectaAsync(dto, int.TryParse(valor, out var id) ? id : null);
+        return CreatedAtAction(nameof(GetById), new { id = orden.IdCompra }, orden);
+    }
+
     [HttpPost("orden")]
     [Authorize(Roles = "Admin,Compras_Admin")]
     public async Task<IActionResult> CrearOrden([FromBody] CrearOrdenCompraRequestDto dto)
@@ -100,7 +111,7 @@ public class CompraController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
         }
     }
 
@@ -114,7 +125,7 @@ public class CompraController : ControllerBase
         var actualizado = await _compraService.EditarOrdenCompraAsync(id, dto);
         if (!actualizado)
         {
-            return NotFound(new { message = $"Orden de compra #{id} no encontrada para editar." });
+            return Problem(detail: $"Orden de compra #{id} no encontrada para editar.", statusCode: StatusCodes.Status404NotFound);
         }
 
         return NoContent();
@@ -130,7 +141,7 @@ public class CompraController : ControllerBase
         var eliminado = await _compraService.EliminarOrdenCompraAsync(id);
         if (!eliminado)
         {
-            return NotFound(new { message = $"Orden de compra #{id} no encontrada para eliminar." });
+            return Problem(detail: $"Orden de compra #{id} no encontrada para eliminar.", statusCode: StatusCodes.Status404NotFound);
         }
 
         return NoContent();
@@ -145,7 +156,7 @@ public class CompraController : ControllerBase
         var orden = await _compraService.GetOrdenCompraByIdAsync(id);
         if (orden == null)
         {
-            return NotFound(new { message = $"La orden de compra #{id} no existe." });
+            return Problem(detail: $"La orden de compra #{id} no existe.", statusCode: StatusCodes.Status404NotFound);
         }
 
         byte[] pdfBytes = _pdfService.GenerarOrdenCompraPdf(orden);

@@ -1,6 +1,72 @@
-@Autozen.Api_HostAddress = http://localhost:5102
+@host = http://localhost:5102
+# 1. Ejecuta el login y copia el "token" de la respuesta aquí:
+@token = PEGA_AQUI_EL_TOKEN
 
-GET {{Autozen.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Login
+POST {{host}}/api/Auth/login
+Content-Type: application/json
 
-###
+{ "username": "admin", "password": "tu-contraseña" }
+
+### Salud (sin token)
+GET {{host}}/health
+
+### Proyectos activos de clientes
+GET {{host}}/api/Proyecto?tipo=Cliente&archivados=false
+Authorization: Bearer {{token}}
+
+### Crear proyecto de aseguradora (como lo hace la Evaluación de Daños)
+POST {{host}}/api/Proyecto
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "tipo": "Aseguradora",
+  "nombreCamion": "Freightliner Cascadia",
+  "placa": "NL-77215",
+  "aseguradora": "Seguros Atlas",
+  "numeroSiniestro": "SIN-2026-0481",
+  "fechaEntregaComprometida": "2026-11-15T00:00:00",
+  "etapaActual": 1,
+  "descripcionDanos": "• Golpe en cabina / pintura",
+  "etapas": [
+    { "nombre": "Evaluación", "diasEstimados": 1 },
+    { "nombre": "Autorización de aseguradora", "diasEstimados": 3 },
+    { "nombre": "Reparación", "diasEstimados": 8 }
+  ],
+  "refacciones": [ { "nombre": "Faro LED", "cantidad": 1 } ]
+}
+
+### Avanzar etapa del proyecto 1
+POST {{host}}/api/Proyecto/1/avanzar
+Authorization: Bearer {{token}}
+
+### Artículos del almacén
+GET {{host}}/api/Almacen/articulos
+Authorization: Bearer {{token}}
+
+### Categorías
+GET {{host}}/api/Almacen/categorias
+Authorization: Bearer {{token}}
+
+### Vale de material (2.5 litros al proyecto 1)
+POST {{host}}/api/Almacen/vales-material
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "proyectoId": 1, "articuloId": 2, "cantidad": 2.5, "entregadoA": "Juan" }
+
+### Préstamo de herramienta
+POST {{host}}/api/Herramientas/prestar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "proyectoId": 1, "articuloId": 7, "cantidad": 1, "entregadoA": "Juan" }
+
+### Órdenes de compra
+GET {{host}}/api/Compra
+Authorization: Bearer {{token}}
+
+### Departamentos
+GET {{host}}/api/Departamento
+Authorization: Bearer {{token}}

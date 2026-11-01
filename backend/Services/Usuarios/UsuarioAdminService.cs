@@ -53,9 +53,10 @@ public class UsuarioAdminService
     }
 
     /// <summary>
-    /// Creación administrativa de usuario. El Administrador puede asignar roles globales o de área.
+    /// Alta de usuario. El Administrador puede asignar cualquier rol; un jefe de departamento
+    /// solo puede dar de alta usuarios con el rol base 'Usuario'.
     /// </summary>
-    public async Task<UsuarioDetalleResponseDto> CrearUsuarioConPrivilegiosAsync(CrearUsuarioAdminRequestDto dto)
+    public async Task<UsuarioDetalleResponseDto> CrearUsuarioConPrivilegiosAsync(CrearUsuarioAdminRequestDto dto, bool solicitanteEsAdmin)
     {
         if (string.IsNullOrWhiteSpace(dto.Nombre) ||
             string.IsNullOrWhiteSpace(dto.Username) ||
@@ -64,13 +65,23 @@ public class UsuarioAdminService
             throw new InvalidOperationException("Nombre, nombre de usuario y contraseña son requeridos.");
         }
 
+        if (dto.Password.Length < 8)
+        {
+            throw new InvalidOperationException("La contraseña debe tener al menos 8 caracteres.");
+        }
+
+        string rolAsignado = ValidarYNormalizarRol(dto.Rol);
+        if (!solicitanteEsAdmin && rolAsignado != Roles.Usuario)
+        {
+            throw new UnauthorizedAccessException("Solo el Administrador puede asignar roles distintos a 'Usuario'.");
+        }
+
         var existente = await _usuarioRepo.GetByUsername(dto.Username.Trim());
         if (existente != null)
         {
             throw new InvalidOperationException($"El nombre de usuario '{dto.Username}' ya está en uso.");
         }
 
-        string rolAsignado = ValidarYNormalizarRol(dto.Rol);
         string passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
 
         var nuevoDto = new CreateUsuarioDto
@@ -132,6 +143,11 @@ public class UsuarioAdminService
         if (actual == null)
             return false;
 
+        if (!string.IsNullOrWhiteSpace(dto.Password) && dto.Password.Length < 8)
+        {
+            throw new InvalidOperationException("La contraseña debe tener al menos 8 caracteres.");
+        }
+
         string passwordFinal = string.IsNullOrWhiteSpace(dto.Password)
             ? actual.Password
             : BCrypt.Net.BCrypt.HashPassword(dto.Password);
@@ -172,19 +188,10 @@ public class UsuarioAdminService
     private static string ValidarYNormalizarRol(string? rol)
     {
         if (string.IsNullOrWhiteSpace(rol))
-            return "Usuario";
+            return Roles.Usuario;
 
         string r = rol.Trim();
-        // Roles estándar del sistema Autozen
-        var rolesValidos = new[]
-        {
-            "Admin",            // Privilegios en todas las áreas
-            "Proyecto_Lider",   // Privilegios en área Taller / Proyectos
-            "Compras_Admin",    // Privilegios en área Compras
-            "Almacen_Admin",    // Privilegios en área Almacén
-            "Usuario"           // Rol base estándar
-        };
-
-        return rolesValidos.FirstOrDefault(val => val.Equals(r, StringComparison.OrdinalIgnoreCase)) ?? r;
+        return Roles.Todos.FirstOrDefault(val => val.Equals(r, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"El rol '{r}' no es válido. Roles permitidos: {string.Join(", ", Roles.Todos)}.");
     }
 }

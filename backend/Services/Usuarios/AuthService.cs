@@ -48,64 +48,6 @@ public class AuthService
         };
     }
 
-    /// <summary>
-    /// Auto-registro público. Asigna estrictamente el rol base 'Usuario' sin privilegios administrativos.
-    /// </summary>
-    public async Task<RegisterUserResponseDto> RegisterAsync(RegisterUserRequestDto request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Nombre) ||
-            string.IsNullOrWhiteSpace(request.Username) ||
-            string.IsNullOrWhiteSpace(request.Password) ||
-            string.IsNullOrWhiteSpace(request.ConfirmarPassword))
-        {
-            throw new InvalidOperationException("Todos los campos obligatorios deben ser completados.");
-        }
-
-        if (request.Password.Length < 6)
-        {
-            throw new InvalidOperationException("La contraseña debe tener al menos 6 caracteres.");
-        }
-
-        if (request.Password != request.ConfirmarPassword)
-        {
-            throw new InvalidOperationException("Las contraseñas no coinciden.");
-        }
-
-        var existente = await _usuarioRepo.GetByUsername(request.Username.Trim());
-        if (existente != null)
-        {
-            throw new InvalidOperationException($"El nombre de usuario '{request.Username}' ya está registrado.");
-        }
-
-        // Regla de Negocio: Auto-registro siempre recibe rol base 'Usuario'
-        const string rolBase = "Usuario";
-        string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
-
-        var nuevoDto = new CreateUsuarioDto
-        {
-            Nombre = request.Nombre.Trim(),
-            Username = request.Username.Trim(),
-            Password = passwordHash,
-            Rol = rolBase,
-            TrabajadorId = null,
-            PuestoTrabajo = null,
-            MetodoContacto = request.MetodoContacto?.Trim()
-        };
-
-        var usuarioCreado = await _usuarioRepo.CreateAsync(nuevoDto);
-        string? token = GenerarToken(usuarioCreado);
-
-        return new RegisterUserResponseDto
-        {
-            IdUsuario = usuarioCreado.IdUsuario,
-            Username = usuarioCreado.Username,
-            Nombre = usuarioCreado.Nombre,
-            Rol = usuarioCreado.Rol,
-            Mensaje = "Usuario registrado exitosamente con rol base.",
-            Token = token
-        };
-    }
-
     public string GenerarToken(Usuario usuario)
     {
         var jwtKey = _config["Jwt:Key"]

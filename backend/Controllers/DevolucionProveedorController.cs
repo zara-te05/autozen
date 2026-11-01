@@ -1,12 +1,14 @@
 using Autozen.Api.DTOs;
 using Autozen.Api.Models;
 using Autozen.Api.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Autozen.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize] // Leer: cualquier usuario autenticado. Escribir: Admin y jefe de Compras
 public class DevolucionProveedorController : ControllerBase
 {
     private readonly IDevolucionProveedorRepository _devolucionproveedorRepository;
@@ -29,12 +31,13 @@ public class DevolucionProveedorController : ControllerBase
         var item = await _devolucionproveedorRepository.GetByIdAsync(id);
         if (item is null)
         {
-            return NotFound(new { message = "DevolucionProveedor no encontrado." });
+            return Problem(detail: "DevolucionProveedor no encontrado.", statusCode: StatusCodes.Status404NotFound);
         }
         return Ok(item);
     }
 
     [HttpPost]
+    [Authorize(Roles = Edicion.Compras)]
     public async Task<ActionResult<DevolucionProveedor>> Create([FromBody] CreateDevolucionProveedorDto dto)
     {
         var created = await _devolucionproveedorRepository.CreateAsync(dto);
@@ -42,23 +45,25 @@ public class DevolucionProveedorController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = Edicion.Compras)]
     public async Task<IActionResult> Update(int id, [FromBody] CreateDevolucionProveedorDto dto)
     {
         var updated = await _devolucionproveedorRepository.UpdateAsync(id, dto);
         if (!updated)
         {
-            return NotFound(new { message = "DevolucionProveedor no encontrado para actualizar." });
+            return Problem(detail: "DevolucionProveedor no encontrado para actualizar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = Edicion.Compras)]
     public async Task<IActionResult> Delete(int id)
     {
         var deleted = await _devolucionproveedorRepository.DeleteAsync(id);
         if (!deleted)
         {
-            return NotFound(new { message = "DevolucionProveedor no encontrado para eliminar." });
+            return Problem(detail: "DevolucionProveedor no encontrado para eliminar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }

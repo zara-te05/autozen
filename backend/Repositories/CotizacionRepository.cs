@@ -27,41 +27,36 @@ public class CotizacionRepository : ICotizacionRepository
     public async Task<IEnumerable<Cotizacion>> GetAllAsync()
     {
         const string query = "SELECT \"id_cotizacion\" AS \"IdCotizacion\", \"operacion_id\" AS \"OperacionId\", \"trabajador_id\" AS \"TrabajadorId\", \"manoObraEstimada\" AS \"ManoObraEstimada\", \"costoEstimadoPiezas\" AS \"CostoEstimadoPiezas\", \"total\" AS \"Total\", \"estadoCotizacion\" AS \"EstadoCotizacion\" FROM COTIZACION;";
-        using var connection = _context.CreateConnection();
-        return await connection.QueryAsync<Cotizacion>(query);
+        return await _context.RunAsync((connection, tx) => connection.QueryAsync<Cotizacion>(query, transaction: tx));
     }
 
     public async Task<Cotizacion?> GetByIdAsync(int id)
     {
         const string query = "SELECT \"id_cotizacion\" AS \"IdCotizacion\", \"operacion_id\" AS \"OperacionId\", \"trabajador_id\" AS \"TrabajadorId\", \"manoObraEstimada\" AS \"ManoObraEstimada\", \"costoEstimadoPiezas\" AS \"CostoEstimadoPiezas\", \"total\" AS \"Total\", \"estadoCotizacion\" AS \"EstadoCotizacion\" FROM COTIZACION WHERE \"id_cotizacion\" = @Id;";
-        using var connection = _context.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Cotizacion>(query, new { Id = id });
+        return await _context.RunAsync((connection, tx) => connection.QueryFirstOrDefaultAsync<Cotizacion>(query, new { Id = id }, transaction: tx));
     }
 
     public async Task<Cotizacion> CreateAsync(CreateCotizacionDto dto)
     {
         const string query = "INSERT INTO COTIZACION (\"operacion_id\", \"trabajador_id\", \"manoObraEstimada\", \"costoEstimadoPiezas\", \"total\", \"estadoCotizacion\") VALUES (@OperacionId, @TrabajadorId, @ManoObraEstimada, @CostoEstimadoPiezas, @Total, @EstadoCotizacion) RETURNING \"id_cotizacion\" AS \"IdCotizacion\", \"operacion_id\" AS \"OperacionId\", \"trabajador_id\" AS \"TrabajadorId\", \"manoObraEstimada\" AS \"ManoObraEstimada\", \"costoEstimadoPiezas\" AS \"CostoEstimadoPiezas\", \"total\" AS \"Total\", \"estadoCotizacion\" AS \"EstadoCotizacion\";";
 
-        using var connection = _context.CreateConnection();
-        return await connection.QuerySingleAsync<Cotizacion>(query, dto);
+        return await _context.RunAsync((connection, tx) => connection.QuerySingleAsync<Cotizacion>(query, dto, transaction: tx));
     }
 
     public async Task<bool> UpdateAsync(int id, CreateCotizacionDto dto)
     {
         const string query = "UPDATE COTIZACION SET \"operacion_id\" = @OperacionId, \"trabajador_id\" = @TrabajadorId, \"manoObraEstimada\" = @ManoObraEstimada, \"costoEstimadoPiezas\" = @CostoEstimadoPiezas, \"total\" = @Total, \"estadoCotizacion\" = @EstadoCotizacion WHERE \"id_cotizacion\" = @Id;";
 
-        using var connection = _context.CreateConnection();
         var parameters = new DynamicParameters(dto);
         parameters.Add("Id", id);
-        var rowsAffected = await connection.ExecuteAsync(query, parameters);
+        var rowsAffected = await _context.RunAsync((connection, tx) => connection.ExecuteAsync(query, parameters, transaction: tx));
         return rowsAffected > 0;
     }
 
     public async Task<bool> DeleteAsync(int id)
     {
         const string query = "DELETE FROM COTIZACION WHERE \"id_cotizacion\" = @Id;";
-        using var connection = _context.CreateConnection();
-        var rowsAffected = await connection.ExecuteAsync(query, new { Id = id });
+        var rowsAffected = await _context.RunAsync((connection, tx) => connection.ExecuteAsync(query, new { Id = id }, transaction: tx));
         return rowsAffected > 0;
     }
 }

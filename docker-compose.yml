@@ -1,0 +1,50 @@
+# ====================================================================
+# AUTOZEN - API + PostgreSQL para producción o pruebas locales
+#   1. Copia .env.example a .env y llena las contraseñas
+#   2. docker compose up -d --build
+# La API queda en http://localhost:8080 (pon un proxy con HTTPS delante en producción)
+# ====================================================================
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
+      AUTOZEN_OWNER_PASSWORD: ${AUTOZEN_OWNER_PASSWORD:?Falta AUTOZEN_OWNER_PASSWORD en .env}
+      AUTOZEN_APP_PASSWORD: ${AUTOZEN_APP_PASSWORD:?Falta AUTOZEN_APP_PASSWORD en .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Crea autozen_db y los usuarios la primera vez que arranca el volumen
+      - ./backend/Database/setup/01_crear_bd_y_usuarios.sql:/autozen/01_crear_bd_y_usuarios.sql:ro
+      - ./backend/Database/setup/docker-init.sh:/docker-entrypoint-initdb.d/docker-init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Sin "ports": la base solo es accesible desde la red interna de Docker
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=autozen_db;Username=autozen_app;Password=${AUTOZEN_APP_PASSWORD}
+      ConnectionStrings__Migraciones: Host=db;Port=5432;Database=autozen_db;Username=autozen_owner;Password=${AUTOZEN_OWNER_PASSWORD}
+      Jwt__Key: ${JWT_KEY:?Falta JWT_KEY en .env}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN:-}
+      Fotos__Carpeta: /app/fotos
+      # Solo se usa si la base no tiene ningún Admin
+      AdminInicial__Username: ${ADMIN_USERNAME:-admin}
+      AdminInicial__Password: ${ADMIN_PASSWORD:-}
+    volumes:
+      # Fotos de los proyectos: sobreviven a reinicios y actualizaciones de la imagen
+      - fotos:/app/fotos
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
+  fotos:

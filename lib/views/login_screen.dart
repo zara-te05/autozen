@@ -1,5 +1,18 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dashboard_screen.dart'; // Importante para la navegación
+import '../services/api_client.dart';
+import '../services/sesion.dart';
+
+/// Cuentas de prueba que entran SIN llamar a la API. Solo existen en modo debug
+/// (`flutter run`); en una compilación release (`flutter build`) quedan desactivadas.
+const Map<String, ({String password, String rol})> _cuentasDePrueba = {
+  'admin@prueba.com': (password: 'prueba123', rol: 'Admin'),
+  'encargado@prueba.com': (password: 'prueba123', rol: 'Proyecto_Lider'),
+  'compras@prueba.com': (password: 'prueba123', rol: 'Compras_Admin'),
+  'almacen@prueba.com': (password: 'prueba123', rol: 'Almacen_Admin'),
+  'evaluacion@prueba.com': (password: 'prueba123', rol: 'Evaluacion_Admin'),
+};
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -63,21 +76,41 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    bool esAdmin = (email == 'admin@autosen.com' && password == 'admin123');
-    bool esEncargado = (email == 'encargado@autosen.com' && password == 'area123');
-
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 1));
 
-    if (!esAdmin && !esEncargado) {
+    String? rolBackend;
+    String mensajeError = 'Credenciales incorrectas. Intenta de nuevo.';
+    String? avisoSincronizacion;
+    final cuentaPrueba = !kReleaseMode ? _cuentasDePrueba[email.toLowerCase()] : null;
+    if (cuentaPrueba != null && cuentaPrueba.password == password) {
+      // Modo demo: no se contacta al backend, todo en memoria con datos de ejemplo
+      rolBackend = cuentaPrueba.rol;
+      Sesion.iniciarDemo(rol: cuentaPrueba.rol);
+    } else {
+      try {
+        final respuesta = await ApiClient().login(email, password);
+        rolBackend = respuesta['rol'] as String?;
+        avisoSincronizacion = await Sesion.iniciarConApi(respuesta);
+      } on ApiException catch (e) {
+        if (e.status == 429) {
+          mensajeError = 'Demasiados intentos. Espera un minuto e intenta de nuevo.';
+        } else if (e.status != 401) {
+          mensajeError = e.mensaje;
+        }
+      }
+    }
+
+    if (rolBackend == null) {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Credenciales incorrectas. Intenta de nuevo.'), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text(mensajeError), backgroundColor: Colors.redAccent),
         );
       }
       return;
     }
+
+    final bool esAdmin = rolBackend == 'Admin';
 
     if (mounted) {
       setState(() {
@@ -87,6 +120,12 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     await Future.delayed(const Duration(milliseconds: 900));
+
+    if (mounted && avisoSincronizacion != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sesión iniciada, pero no se pudo cargar todo: $avisoSincronizacion')),
+      );
+    }
 
     if (mounted) {
       String rolAsignado = esAdmin ? 'admin' : 'encargado';

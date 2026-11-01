@@ -1,12 +1,14 @@
 using Autozen.Api.DTOs;
 using Autozen.Api.Models;
 using Autozen.Api.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Autozen.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize] // Leer: cualquier usuario autenticado. Escribir: Admin y jefe de Evaluación
 public class CamionController : ControllerBase
 {
     private readonly ICamionRepository _camionRepository;
@@ -29,12 +31,13 @@ public class CamionController : ControllerBase
         var item = await _camionRepository.GetByIdAsync(id);
         if (item is null)
         {
-            return NotFound(new { message = "Camion no encontrado." });
+            return Problem(detail: "Camion no encontrado.", statusCode: StatusCodes.Status404NotFound);
         }
         return Ok(item);
     }
 
     [HttpPost]
+    [Authorize(Roles = Edicion.Evaluacion)]
     public async Task<ActionResult<Camion>> Create([FromBody] CreateCamionDto dto)
     {
         var created = await _camionRepository.CreateAsync(dto);
@@ -42,23 +45,25 @@ public class CamionController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = Edicion.Evaluacion)]
     public async Task<IActionResult> Update(int id, [FromBody] CreateCamionDto dto)
     {
         var updated = await _camionRepository.UpdateAsync(id, dto);
         if (!updated)
         {
-            return NotFound(new { message = "Camion no encontrado para actualizar." });
+            return Problem(detail: "Camion no encontrado para actualizar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = Edicion.Evaluacion)]
     public async Task<IActionResult> Delete(int id)
     {
         var deleted = await _camionRepository.DeleteAsync(id);
         if (!deleted)
         {
-            return NotFound(new { message = "Camion no encontrado para eliminar." });
+            return Problem(detail: "Camion no encontrado para eliminar.", statusCode: StatusCodes.Status404NotFound);
         }
         return NoContent();
     }
