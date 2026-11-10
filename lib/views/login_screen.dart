@@ -71,7 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, ingresa tu correo y contraseña.'), backgroundColor: Colors.redAccent),
+        const SnackBar(content: Text('Por favor, ingresa tu usuario y contraseña.'), backgroundColor: Colors.redAccent),
       );
       return;
     }
@@ -162,14 +162,16 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const Text('Iniciar Sesión', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black)),
                 const SizedBox(height: 24),
-                const Text('Correo electrónico', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black87)),
+                const Text('Usuario', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black87)),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
+                  keyboardType: TextInputType.text,
+                  autocorrect: false,
+                  textCapitalization: TextCapitalization.none,
                   style: const TextStyle(color: Colors.black),
                   decoration: InputDecoration(
-                    hintText: 'ejemplo@autosen.com',
+                    hintText: 'Ej. admin',
                     hintStyle: const TextStyle(color: Colors.black26),
                     filled: true,
                     fillColor: Colors.white,
