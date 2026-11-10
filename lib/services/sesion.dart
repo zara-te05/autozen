@@ -6,6 +6,7 @@ import 'catalogos_store.dart';
 import 'compras_store.dart';
 import 'proveedores_store.dart';
 import 'proyectos_store.dart';
+import 'tablero_store.dart';
 
 /// Sesión actual.
 ///
@@ -54,6 +55,7 @@ class Sesion {
       ComprasStore.instancia.cargar(),
       CatalogosStore.instancia.cargar(),
       AvisosStore.instancia.cargar(),
+      TableroStore.instancia.cargar(),
     ]);
     final errores = resultados.whereType<String>().toSet();
     if (errores.isNotEmpty) debugPrint('Errores al sincronizar: $errores');
@@ -75,5 +77,6 @@ class Sesion {
     ComprasStore.instancia.reiniciarDemo();
     CatalogosStore.instancia.reiniciarDemo();
     AvisosStore.instancia.reiniciarDemo();
+    TableroStore.instancia.reiniciarDemo();
   }
 }

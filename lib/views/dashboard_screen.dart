@@ -11,6 +11,8 @@ import '../models/proyecto_taller.dart';
 import 'compras_screen.dart';
 import 'departamentos_screen.dart'; 
 import 'proveedores_screen.dart';
+import '../services/tablero_store.dart';
+import '../widgets/tablero_inicio.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String rol;
@@ -109,16 +111,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               const SizedBox(height: 260),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 10, left: 20, right: 20, bottom: 20),
-                  // Tarjetas de ancho máximo fijo: 2 columnas en teléfono, más columnas en ventanas anchas
-                  child: GridView.extent(
-                    padding: EdgeInsets.zero,
-                    maxCrossAxisExtent: 240,
-                    crossAxisSpacing: 16.0,
-                    mainAxisSpacing: 16.0,
-                    childAspectRatio: 0.95,
-                    children: _generarTarjetasSegunRol(context),
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    final error = await TableroStore.instancia.cargar();
+                    if (error != null && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.redAccent));
+                    }
+                  },
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      // Primero el tablero: entregas de la semana, coordinación del día y anuncios
+                      const SliverPadding(
+                        padding: EdgeInsets.only(top: 20, left: 20, right: 20),
+                        sliver: SliverToBoxAdapter(child: TableroInicio()),
+                      ),
+                      // Tarjetas de ancho máximo fijo: 2 columnas en teléfono, más columnas en ventanas anchas
+                      SliverPadding(
+                        padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+                        sliver: SliverGrid.extent(
+                          maxCrossAxisExtent: 240,
+                          crossAxisSpacing: 16.0,
+                          mainAxisSpacing: 16.0,
+                          childAspectRatio: 0.95,
+                          children: _generarTarjetasSegunRol(context),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

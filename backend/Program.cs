@@ -60,6 +60,8 @@ builder.Services.AddScoped<AlmacenService>();
 builder.Services.AddScoped<DepartamentoService>();
 builder.Services.AddScoped<NotificacionService>();
 builder.Services.AddScoped<SolicitudesCompraService>();
+builder.Services.AddScoped<TableroService>();
+builder.Services.AddHostedService<LimpiezaCoordinacionService>();
 
 // JWT Authentication
 // Los secretos vienen de user-secrets (desarrollo) o variables de entorno (producción), no de appsettings.json

@@ -404,3 +404,70 @@ public class AvisoDto
     public string Mensaje { get; set; } = string.Empty;
     public DateTime Fecha { get; set; }
 }
+
+// =====================================================================
+// Tablero de inicio: entregas de la semana, coordinación del día y anuncios
+// =====================================================================
+
+public class EntregaSemanaDto
+{
+    public int Id { get; set; }
+
+    [Required(ErrorMessage = "La unidad es obligatoria."), MaxLength(120)]
+    public string Unidad { get; set; } = string.Empty;
+
+    [MaxLength(150)]
+    public string? Cliente { get; set; }
+
+    [Required(ErrorMessage = "La fecha de entrega es obligatoria.")]
+    public DateTime? FechaEntrega { get; set; }
+
+    [MaxLength(1000)]
+    public string? Notas { get; set; }
+
+    public bool Entregada { get; set; }
+    public string? CreadoPor { get; set; }
+}
+
+public class CoordinacionDto
+{
+    public int Id { get; set; }
+
+    [Required(ErrorMessage = "La cuadrilla es obligatoria."), MaxLength(80)]
+    public string Cuadrilla { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "La asignación es obligatoria."), MaxLength(1000)]
+    public string Asignacion { get; set; } = string.Empty;
+
+    /// <summary>amarillo, rosa, azul, verde o naranja.</summary>
+    [MaxLength(20)]
+    public string? Color { get; set; }
+
+    public string? CreadoPor { get; set; }
+    public DateTime Creado { get; set; }
+}
+
+public class AnuncioDto
+{
+    public int Id { get; set; }
+
+    [Required(ErrorMessage = "El título es obligatorio."), MaxLength(150)]
+    public string Titulo { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "El contenido es obligatorio."), MaxLength(4000)]
+    public string Contenido { get; set; } = string.Empty;
+
+    public string? CreadoPor { get; set; }
+    public DateTime Creado { get; set; }
+    public DateTime? Editado { get; set; }
+}
+
+/// <summary>Todo lo que muestra el tablero de inicio en una sola petición.</summary>
+public class TableroDto
+{
+    public DateTime InicioSemana { get; set; }
+    public DateTime FinSemana { get; set; }
+    public List<EntregaSemanaDto> Entregas { get; set; } = [];
+    public List<CoordinacionDto> Coordinacion { get; set; } = [];
+    public List<AnuncioDto> Anuncios { get; set; } = [];
+}
