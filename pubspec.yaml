@@ -46,6 +46,8 @@ dependencies:
   # PDFs de la aseguradora: elegir el archivo y abrirlo con el visor del sistema
   file_selector: ^1.0.3
   open_filex: ^4.5.0
+  # Tipografía Inter (se descarga la primera vez y queda en caché)
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:

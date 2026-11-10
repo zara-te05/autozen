@@ -10,4 +10,7 @@ public class Usuario
     public string Password {get; set;} = default!;
     public string? PuestoTrabajo { get; set; } = default!;
     public string? MetodoContacto { get; set; } = default!;
+
+    /// <summary>Proyectos, Compras, Almacen o Evaluacion. Null para el Admin.</summary>
+    public string? Area { get; set; }
 }

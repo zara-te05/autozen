@@ -2,10 +2,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/tablero.dart';
 import 'api_client.dart';
+import 'proyectos_store.dart';
 import 'sesion.dart';
 
 /// Tablero de inicio del dashboard:
-/// 1. Entregas de unidades de la semana.
+/// 1. Entregas de unidades de la semana: salen de los proyectos existentes (fecha comprometida con la
+///    aseguradora o, en proyectos de cliente, la estimada por etapas). El Admin puede agregar entregas
+///    manuales o quitar proyectos del tablero.
 /// 2. Coordinación operativa del día (post-its de cuadrillas que se borran a las 7 pm).
 /// 3. Anuncios.
 ///
@@ -23,6 +26,9 @@ class TableroStore extends ChangeNotifier {
 
   final ApiClient _api = ApiClient();
   final List<EntregaSemana> _entregas = [];
+
+  /// Modo demo: proyectos que el Admin quitó del tablero (código → fecha de entrega al quitarlo).
+  final Map<String, DateTime> _ocultosDemo = {};
   final List<NotaCoordinacion> _coordinacion = [];
   final List<Anuncio> _anuncios = [];
   int _idLocal = 1000;
@@ -57,18 +63,75 @@ class TableroStore extends ChangeNotifier {
   // Lectura
   // ------------------------------------------------------------------
 
-  /// Entregas de esta semana, ordenadas por día; las ya entregadas al final de su día.
+  /// Entregas de esta semana (y proyectos atrasados sin terminar), ordenadas por día.
+  /// Las ocultas solo las ve el Admin, al final.
   List<EntregaSemana> get entregas {
     final inicio = inicioSemana;
     final fin = finSemana;
-    final lista = _entregas.where((e) => !e.fechaEntrega.isBefore(inicio) && !e.fechaEntrega.isAfter(fin)).toList()
+    final lista = <EntregaSemana>[
+      // Con sesión real el backend ya manda solo lo de esta semana (más los proyectos atrasados)
+      ..._entregas.where((e) => !Sesion.modoDemo || e.esProyecto || (!e.fechaEntrega.isBefore(inicio) && !e.fechaEntrega.isAfter(fin))),
+      if (Sesion.modoDemo) ..._entregasDeProyectosDemo(inicio, fin),
+    ].where((e) => Sesion.esAdmin || !e.oculta).toList()
       ..sort((a, b) {
+        if (a.oculta != b.oculta) return a.oculta ? 1 : -1;
         final porFecha = a.fechaEntrega.compareTo(b.fechaEntrega);
         if (porFecha != 0) return porFecha;
         if (a.entregada != b.entregada) return a.entregada ? 1 : -1;
         return a.unidad.toLowerCase().compareTo(b.unidad.toLowerCase());
       });
     return List.unmodifiable(lista);
+  }
+
+  /// Modo demo: lo mismo que calcula el backend, a partir de los proyectos en memoria.
+  Iterable<EntregaSemana> _entregasDeProyectosDemo(DateTime inicio, DateTime fin) sync* {
+    for (final p in ProyectosStore.instancia.activos) {
+      final fecha = soloFecha(p.fechaEntrega);
+      final enSemana = !fecha.isBefore(inicio) && !fecha.isAfter(fin);
+      final atrasado = fecha.isBefore(inicio) && !p.terminado;
+      if (!enSemana && !atrasado) continue;
+      yield EntregaSemana(
+        id: -(p.serverId ?? p.id.hashCode.abs()),
+        origen: 'proyecto',
+        proyectoId: p.serverId ?? p.id.hashCode.abs(),
+        codigo: p.id,
+        unidad: p.placa.isEmpty ? p.nombreCamion : '${p.nombreCamion} · ${p.placa}',
+        cliente: p.nombreContraparte.isEmpty ? null : p.nombreContraparte,
+        fechaEntrega: fecha,
+        entregada: p.terminado,
+        oculta: _ocultosDemo[p.id] == fecha,
+      );
+    }
+  }
+
+  /// Quita del tablero un proyecto (vuelve a aparecer si cambia su fecha de entrega).
+  Future<String?> ocultarProyecto(EntregaSemana entrega) => _cambiarOculta(entrega, true);
+
+  /// Regresa al tablero un proyecto que se había quitado.
+  Future<String?> mostrarProyecto(EntregaSemana entrega) => _cambiarOculta(entrega, false);
+
+  Future<String?> _cambiarOculta(EntregaSemana entrega, bool ocultar) async {
+    if (!entrega.esProyecto) return null;
+    if (Sesion.modoDemo) {
+      if (ocultar) {
+        _ocultosDemo[entrega.codigo ?? ''] = entrega.fechaEntrega;
+      } else {
+        _ocultosDemo.remove(entrega.codigo);
+      }
+      notifyListeners();
+      return null;
+    }
+    try {
+      final ruta = '/Tablero/entregas/proyecto/${entrega.proyectoId}/ocultar';
+      await (ocultar ? _api.post(ruta) : _api.delete(ruta));
+      for (final e in _entregas.where((e) => e.esProyecto && e.proyectoId == entrega.proyectoId)) {
+        e.oculta = ocultar;
+      }
+      notifyListeners();
+      return null;
+    } on ApiException catch (e) {
+      return e.mensaje;
+    }
   }
 
   /// Notas vigentes (creadas después del último corte de las 7 pm).
@@ -263,6 +326,7 @@ class TableroStore extends ChangeNotifier {
 
   void reiniciarDemo() {
     _entregas.clear();
+    _ocultosDemo.clear();
     _coordinacion.clear();
     _anuncios.clear();
     _cargarEjemplos();
@@ -272,11 +336,10 @@ class TableroStore extends ChangeNotifier {
   void _cargarEjemplos() {
     final lunes = inicioSemana;
     final ahora = DateTime.now();
-    _entregas.addAll([
-      EntregaSemana(id: 1, unidad: 'Kenworth T680 #45', cliente: 'Transportes del Norte', fechaEntrega: lunes.add(const Duration(days: 1)), entregada: true),
-      EntregaSemana(id: 2, unidad: 'Freightliner Cascadia #12', cliente: 'Logística Bajío', fechaEntrega: lunes.add(const Duration(days: 3)), notas: 'Cliente pasa por la unidad a las 10 am'),
-      EntregaSemana(id: 3, unidad: 'International LT #7', cliente: 'Seguros Atlas (siniestro 4471)', fechaEntrega: lunes.add(const Duration(days: 4))),
-    ]);
+    // Las entregas de proyectos se calculan de los proyectos de ejemplo; esta es una manual
+    _entregas.add(
+      EntregaSemana(id: 3, unidad: 'International LT #7', cliente: 'Seguros Atlas (siniestro 4471)', fechaEntrega: lunes.add(const Duration(days: 4)), notas: 'Unidad de un taller externo'),
+    );
     _coordinacion.addAll([
       NotaCoordinacion(id: 4, cuadrilla: 'Cuadrilla 1', asignacion: 'Hojalatería Kenworth #45 y apoyo en pintura', color: 'amarillo', creado: ahora),
       NotaCoordinacion(id: 5, cuadrilla: 'Cuadrilla 2', asignacion: 'Desarmado Cascadia #12', color: 'rosa', creado: ahora),

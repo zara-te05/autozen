@@ -9,7 +9,7 @@ namespace Autozen.Api.Controllers;
 /// <summary>Proyectos del taller (clientes y aseguradoras), sus etapas y fotos.</summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Policy = Lectura.Proyectos)] // Leer: Admin, jefes y usuarios del área de Proyectos (y Evaluación). Escribir: según cada acción
 public class ProyectoController : ControllerBase
 {
     private readonly ProyectosTallerService _servicio;

@@ -12,6 +12,7 @@ import 'compras_screen.dart';
 import 'departamentos_screen.dart'; 
 import 'proveedores_screen.dart';
 import '../services/tablero_store.dart';
+import '../widgets/animaciones.dart';
 import '../widgets/tablero_inicio.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -78,8 +79,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 context,
                 PageRouteBuilder(
                   pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+                  transitionDuration: const Duration(milliseconds: 400),
                   transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                    return FadeTransition(opacity: animation, child: child); // Regresamos con un Fade suave
+                    // Regresamos con un fundido suave
+                    return FadeTransition(opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut), child: child);
                   },
                 ),
                 (Route<dynamic> route) => false, 
@@ -100,7 +103,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final String tituloVista = widget.rol == 'admin' ? 'Vista de Administrador' : 'Vista de Encargado';
+    final String tituloVista = Sesion.descripcionVista;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F4F5),
@@ -134,7 +137,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           crossAxisSpacing: 16.0,
                           mainAxisSpacing: 16.0,
                           childAspectRatio: 0.95,
-                          children: _generarTarjetasSegunRol(context),
+                          children: [
+                            // Entran una tras otra, después del tablero
+                            for (final (i, tarjeta) in _generarTarjetasSegunRol(context).indexed) Aparicion(indice: i + 3, child: tarjeta),
+                          ],
                         ),
                       ),
                     ],
@@ -232,78 +238,137 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Widget> _generarTarjetasSegunRol(BuildContext context) {
     List<Widget> tarjetas = [];
 
-    if (widget.rol == 'admin') {
+    // Cada quien ve solo las áreas que puede leer (Admin y jefes: todas; un Usuario: la suya)
+    if (Sesion.gestionaUsuarios) {
       tarjetas.add(_buildMenuCard(context, 'Usuarios', Icons.people_outline, () {
         Navigator.push(context, MaterialPageRoute(builder: (context) => const UsuariosScreen()));
       }));
+    }
+    if (Sesion.esAdmin) {
       tarjetas.add(_buildMenuCard(context, 'Departamentos', Icons.business_outlined, () {
         Navigator.push(context, MaterialPageRoute(builder: (context) => const DepartamentosScreen()));
       }));
     }
 
     // El primer paso siempre es evaluar el daño; de ahí nace el proyecto
-    tarjetas.add(_buildMenuCard(context, 'Evaluación de Daños', Icons.fact_check_outlined, () {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const EvaluacionScreen()));
-    }));
-    tarjetas.add(_buildMenuCard(context, 'Proyectos de Clientes', Icons.folder_open, () {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const ProyectosScreen(tipo: TipoProyecto.cliente)));
-    }));
-    tarjetas.add(_buildMenuCard(context, 'Proyectos de Aseguradora', Icons.verified_user_outlined, () {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const ProyectosScreen(tipo: TipoProyecto.aseguradora)));
-    }));
-    tarjetas.add(_buildMenuCard(context, 'Compras', Icons.shopping_bag_outlined, () {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const ComprasScreen()));
-    }));
-    tarjetas.add(_buildMenuCard(context, 'Almacén', Icons.inventory_2_outlined, () {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const AlmacenScreen()));
-    }));
-    tarjetas.add(_buildMenuCard(context, 'Proveedores', Icons.storefront_outlined, () {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const ProveedoresScreen()));
-    }));
+    if (Sesion.veEvaluacion && Sesion.creaProyectos) {
+      tarjetas.add(_buildMenuCard(context, 'Evaluación de Daños', Icons.fact_check_outlined, () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const EvaluacionScreen()));
+      }));
+    }
+    if (Sesion.veProyectos) {
+      tarjetas.add(_buildMenuCard(context, 'Proyectos de Clientes', Icons.folder_open, () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ProyectosScreen(tipo: TipoProyecto.cliente)));
+      }));
+      tarjetas.add(_buildMenuCard(context, 'Proyectos de Aseguradora', Icons.verified_user_outlined, () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ProyectosScreen(tipo: TipoProyecto.aseguradora)));
+      }));
+    }
+    if (Sesion.veCompras) {
+      tarjetas.add(_buildMenuCard(context, 'Compras', Icons.shopping_bag_outlined, () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ComprasScreen()));
+      }));
+    }
+    if (Sesion.veAlmacen) {
+      tarjetas.add(_buildMenuCard(context, 'Almacén', Icons.inventory_2_outlined, () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const AlmacenScreen()));
+      }));
+    }
+    if (Sesion.veCompras) {
+      tarjetas.add(_buildMenuCard(context, 'Proveedores', Icons.storefront_outlined, () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => const ProveedoresScreen()));
+      }));
+    }
 
     return tarjetas;
   }
 
-  Widget _buildMenuCard(BuildContext context, String title, IconData icon, VoidCallback onTap) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04), 
-            blurRadius: 15,
-            offset: const Offset(0, 8),
+  Widget _buildMenuCard(BuildContext context, String title, IconData icon, VoidCallback onTap) =>
+      _TarjetaMenu(titulo: title, icono: icon, onTap: onTap);
+}
+
+/// Tarjeta de área del dashboard: se encoge al tocarla y, con el mouse encima,
+/// se eleva, el ícono se vuelve negro y la flecha avanza.
+class _TarjetaMenu extends StatefulWidget {
+  final String titulo;
+  final IconData icono;
+  final VoidCallback onTap;
+
+  const _TarjetaMenu({required this.titulo, required this.icono, required this.onTap});
+
+  @override
+  State<_TarjetaMenu> createState() => _TarjetaMenuState();
+}
+
+class _TarjetaMenuState extends State<_TarjetaMenu> {
+  bool _activa = false;
+
+  static const _duracion = Duration(milliseconds: 220);
+
+  @override
+  Widget build(BuildContext context) {
+    return Presionable(
+      escalaEncima: 1.0, // La elevación ya marca el hover; solo se encoge al tocar
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _activa = true),
+        onExit: (_) => setState(() => _activa = false),
+        child: AnimatedContainer(
+          duration: _duracion,
+          curve: Curves.easeOutCubic,
+          transform: Matrix4.translationValues(0, _activa ? -4 : 0, 0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: _activa ? Colors.black12 : Colors.transparent),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: _activa ? 0.10 : 0.04),
+                blurRadius: _activa ? 24 : 15,
+                offset: Offset(0, _activa ? 12 : 8),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: onTap,
-          splashColor: Colors.black.withValues(alpha: 0.05),
-          highlightColor: Colors.black.withValues(alpha: 0.02),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
-                  child: Icon(icon, size: 28, color: Colors.black87),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: widget.onTap,
+              splashColor: Colors.black.withValues(alpha: 0.05),
+              highlightColor: Colors.black.withValues(alpha: 0.02),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AnimatedContainer(
+                      duration: _duracion,
+                      curve: Curves.easeOutCubic,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: _activa ? Colors.black : Colors.grey.shade100, shape: BoxShape.circle),
+                      child: TweenAnimationBuilder<Color?>(
+                        duration: _duracion,
+                        tween: ColorTween(end: _activa ? Colors.white : Colors.black87),
+                        builder: (context, color, _) => Icon(widget.icono, size: 28, color: color),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      widget.titulo,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black, height: 1.2),
+                    ),
+                    const SizedBox(height: 6),
+                    AnimatedSlide(
+                      duration: _duracion,
+                      curve: Curves.easeOutCubic,
+                      offset: Offset(_activa ? 0.35 : 0, 0),
+                      child: Icon(Icons.arrow_forward_rounded, size: 16, color: _activa ? Colors.black87 : Colors.black38),
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black),
-                ),
-                const SizedBox(height: 4),
-                const Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.black38),
-              ],
+              ),
             ),
           ),
         ),

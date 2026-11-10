@@ -5,8 +5,10 @@ import '../models/compras.dart';
 import '../services/almacen_store.dart';
 import '../services/compras_store.dart';
 import '../services/proveedores_store.dart';
+import '../services/sesion.dart';
 import '../utils/app_theme.dart';
 import '../utils/formato_fecha.dart';
+import '../widgets/aviso_solo_lectura.dart';
 import '../widgets/contenido_responsivo.dart';
 import '../widgets/hoja_orden_compra.dart';
 
@@ -72,7 +74,8 @@ class _OrdenCompraScreenState extends State<OrdenCompraScreen> {
   bool _guardando = false;
 
   SolicitudCompra get _s => widget.solicitud;
-  bool get _editable => _s.estado == EstadoSolicitud.pendiente;
+  /// Solo Compras y el Admin completan, aprueban o rechazan; los demás ven la solicitud en modo consulta.
+  bool get _editable => _s.estado == EstadoSolicitud.pendiente && Sesion.editaCompras;
 
   @override
   void initState() {
@@ -273,7 +276,9 @@ class _OrdenCompraScreenState extends State<OrdenCompraScreen> {
       children: [
         _buildSolicitud(),
         const SizedBox(height: 16),
-        if (_s.estado == EstadoSolicitud.rechazada)
+        if (_s.estado == EstadoSolicitud.pendiente)
+          const AvisoSoloLectura('Solicitud pendiente: el área de Compras la revisará para aprobarla o rechazarla.')
+        else if (_s.estado == EstadoSolicitud.rechazada)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(

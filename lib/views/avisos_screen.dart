@@ -3,6 +3,7 @@ import '../services/avisos_store.dart';
 import '../services/sesion.dart';
 import '../utils/app_theme.dart';
 import '../utils/formato_fecha.dart';
+import '../widgets/animaciones.dart';
 import '../widgets/contenido_responsivo.dart';
 import '../widgets/menu_lateral.dart';
 
@@ -71,7 +72,9 @@ class _AvisosScreenState extends State<AvisosScreen> {
               itemBuilder: (context, i) {
                 final a = avisos[i];
                 final nuevo = _nuevosAlAbrir.contains(a.id);
-                return Container(
+                return Aparicion(
+                  indice: i,
+                  child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: nuevo ? const Color(0xFFEFF6FF) : Colors.white,
@@ -96,6 +99,7 @@ class _AvisosScreenState extends State<AvisosScreen> {
                         ),
                       ),
                     ],
+                  ),
                   ),
                 );
               },

@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/proyecto_taller.dart';
 import '../services/api_client.dart';
 import '../services/proyectos_store.dart';
+import '../services/sesion.dart';
 import '../utils/app_theme.dart';
 import '../utils/formato_fecha.dart';
 import 'confirm_dialog.dart';
@@ -25,6 +26,9 @@ class _DocumentosProyectoState extends State<DocumentosProyecto> {
   bool _ocupado = false;
 
   ProyectoTaller get _p => widget.proyecto;
+
+  /// Subir y borrar PDFs: Admin, Proyectos y Evaluación (y solo si el proyecto no está archivado).
+  bool get _puedeEditar => !_p.archivado && Sesion.creaProyectos;
 
   static const XTypeGroup _pdf = XTypeGroup(
     label: 'PDF',
@@ -128,7 +132,7 @@ class _DocumentosProyectoState extends State<DocumentosProyecto> {
                   title: Text(d.nombre, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: Text([_tamano(d.tamano), formatearFecha(d.fecha)].where((t) => t.isNotEmpty).join(' • ')),
                   onTap: _ocupado ? null : () => _abrir(d),
-                  trailing: _p.archivado
+                  trailing: !_puedeEditar
                       ? null
                       : IconButton(
                           icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
@@ -137,7 +141,7 @@ class _DocumentosProyectoState extends State<DocumentosProyecto> {
                         ),
                 ),
               ),
-          if (!_p.archivado) ...[
+          if (_puedeEditar) ...[
             const SizedBox(height: 6),
             _ocupado
                 ? const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))

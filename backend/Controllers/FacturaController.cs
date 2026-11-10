@@ -8,7 +8,7 @@ namespace Autozen.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // Leer: cualquier usuario autenticado. Escribir: Admin y jefe de Compras
+[Authorize(Policy = Lectura.Compras)] // Leer: Admin, jefes y usuarios del área de Compras. Escribir: según cada acción
 public class FacturaController : ControllerBase
 {
     private readonly IFacturaRepository _facturaRepository;

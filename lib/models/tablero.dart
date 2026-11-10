@@ -5,15 +5,30 @@ DateTime? _fecha(dynamic v) => v == null ? null : DateTime.parse(v as String).to
 /// Solo la parte de fecha (sin hora), para comparar días.
 DateTime soloFecha(DateTime f) => DateTime(f.year, f.month, f.day);
 
-/// Unidad (camión) que debe entregarse en la semana. Captura manual del Admin.
+/// Unidad (camión) que debe entregarse en la semana.
+/// Sale de un proyecto existente ([esProyecto]) o la captura a mano el Admin.
 class EntregaSemana {
   int id;
   String unidad;
   String? cliente;
   DateTime fechaEntrega;
   String? notas;
+
+  /// Manual: la marcó el Admin. Proyecto: el proyecto ya terminó todas sus etapas.
   bool entregada;
   String? creadoPor;
+
+  /// "proyecto" o "manual".
+  final String origen;
+
+  /// Id del proyecto en el servidor (solo origen "proyecto").
+  final int? proyectoId;
+
+  /// Código del proyecto: PC-001 / PA-001.
+  final String? codigo;
+
+  /// El Admin la quitó del tablero (solo la ve el Admin, para poder regresarla).
+  bool oculta;
 
   EntregaSemana({
     required this.id,
@@ -23,7 +38,13 @@ class EntregaSemana {
     this.notas,
     this.entregada = false,
     this.creadoPor,
+    this.origen = 'manual',
+    this.proyectoId,
+    this.codigo,
+    this.oculta = false,
   });
+
+  bool get esProyecto => origen == 'proyecto';
 
   factory EntregaSemana.fromJson(Map<String, dynamic> j) {
     // La fecha llega como "2026-11-12T00:00:00": se toma el día tal cual, sin convertir de zona
@@ -40,6 +61,10 @@ class EntregaSemana {
       notas: j['notas'] as String?,
       entregada: j['entregada'] as bool? ?? false,
       creadoPor: j['creadoPor'] as String?,
+      origen: j['origen'] as String? ?? 'manual',
+      proyectoId: (j['proyectoId'] as num?)?.toInt(),
+      codigo: j['codigo'] as String?,
+      oculta: j['oculta'] as bool? ?? false,
     );
   }
 
@@ -60,6 +85,10 @@ class EntregaSemana {
         notas: notas,
         entregada: entregada,
         creadoPor: creadoPor,
+        origen: origen,
+        proyectoId: proyectoId,
+        codigo: codigo,
+        oculta: oculta,
       );
 }
 

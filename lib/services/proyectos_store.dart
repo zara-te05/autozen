@@ -73,6 +73,13 @@ class ProyectosStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Deja el store vacío (el usuario no tiene acceso a esta área).
+  void vaciar() {
+    _proyectos.clear();
+    _siguienteIdDemo = 100;
+    notifyListeners();
+  }
+
   // ------------------------------------------------------------------ Escritura
 
   /// Crea el proyecto con los datos de la Evaluación de Daños y sube sus fotos.

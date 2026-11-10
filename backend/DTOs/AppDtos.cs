@@ -427,6 +427,18 @@ public class EntregaSemanaDto
 
     public bool Entregada { get; set; }
     public string? CreadoPor { get; set; }
+
+    /// <summary>"proyecto" (sale de un proyecto existente) o "manual" (capturada por el Admin).</summary>
+    public string Origen { get; set; } = "manual";
+
+    /// <summary>Id del proyecto (OPERACIONES) cuando el origen es "proyecto".</summary>
+    public int? ProyectoId { get; set; }
+
+    /// <summary>Código del proyecto (PC-001 / PA-001).</summary>
+    public string? Codigo { get; set; }
+
+    /// <summary>El Admin la quitó del tablero (solo la ve el Admin, para poder regresarla).</summary>
+    public bool Oculta { get; set; }
 }
 
 public class CoordinacionDto

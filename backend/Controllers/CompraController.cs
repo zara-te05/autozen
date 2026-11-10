@@ -8,7 +8,7 @@ namespace Autozen.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // Autenticación obligatoria
+[Authorize(Policy = Lectura.Compras)] // Leer: Admin, jefes y usuarios del área de Compras. Escribir: según cada acción
 public class CompraController : ControllerBase
 {
     private readonly CompraService _compraService;

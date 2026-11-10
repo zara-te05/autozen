@@ -44,6 +44,7 @@ public class AuthService
             Username = usuario.Username,
             Rol = usuario.Rol,
             Nombre = usuario.Nombre,
+            Area = Areas.DeRol(usuario.Rol) ?? usuario.Area,
             Expira = DateTime.UtcNow.AddMinutes(double.Parse(_config["Jwt:ExpiresInMinutes"] ?? "480"))
         };
     }
@@ -53,14 +54,17 @@ public class AuthService
         var jwtKey = _config["Jwt:Key"]
             ?? throw new InvalidOperationException("Jwt:Key no está configurada en appsettings.json.");
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, usuario.IdUsuario.ToString()),
-            new Claim(JwtRegisteredClaimNames.UniqueName, usuario.Username),
-            new Claim(ClaimTypes.Role, usuario.Rol),
-            new Claim("nombre", usuario.Nombre ?? string.Empty),
-            new Claim("puesto", usuario.PuestoTrabajo ?? string.Empty)
+            new(JwtRegisteredClaimNames.Sub, usuario.IdUsuario.ToString()),
+            new(JwtRegisteredClaimNames.UniqueName, usuario.Username),
+            new(ClaimTypes.Role, usuario.Rol),
+            new("nombre", usuario.Nombre ?? string.Empty),
+            new("puesto", usuario.PuestoTrabajo ?? string.Empty)
         };
+        // Área del usuario: limita qué departamentos puede leer un usuario con rol 'Usuario'
+        var area = Areas.DeRol(usuario.Rol) ?? usuario.Area;
+        if (!string.IsNullOrEmpty(area)) claims.Add(new Claim(Areas.Claim, area));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

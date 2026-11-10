@@ -4,9 +4,12 @@ import '../models/proyecto_taller.dart';
 import '../models/resguardo.dart';
 import '../services/almacen_store.dart';
 import '../services/proyectos_store.dart';
+import '../services/sesion.dart';
 import '../utils/app_theme.dart';
 import '../utils/formato_fecha.dart';
+import '../widgets/aviso_solo_lectura.dart';
 import '../widgets/confirm_dialog.dart';
+import '../widgets/animaciones.dart';
 import '../widgets/contenido_responsivo.dart';
 import '../widgets/dialogo_categorias.dart';
 import '../widgets/formulario_articulo.dart';
@@ -51,7 +54,8 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    // La pestaña 'Alta de Piezas' solo existe para quien puede editar el almacén
+    _tabController = TabController(length: Sesion.editaAlmacen ? 5 : 4, vsync: this);
   }
 
   @override
@@ -77,11 +81,12 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
       appBar: AppBar(
         title: const Text('Gestión de Almacén'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.category_outlined),
-            tooltip: 'Administrar categorías',
-            onPressed: () => mostrarDialogoCategorias(context),
-          ),
+          if (Sesion.editaAlmacen)
+            IconButton(
+              icon: const Icon(Icons.category_outlined),
+              tooltip: 'Administrar categorías',
+              onPressed: () => mostrarDialogoCategorias(context),
+            ),
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -91,12 +96,12 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
           indicatorWeight: 3,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white54,
-          tabs: const [
-            Tab(text: 'Alta de Piezas'),
-            Tab(text: 'Desglose de inventario'),
-            Tab(text: 'Vales de Material'),
-            Tab(text: 'Herramientas (deben volver)'),
-            Tab(text: 'Placas y resguardos'),
+          tabs: [
+            if (Sesion.editaAlmacen) const Tab(text: 'Alta de Piezas'),
+            const Tab(text: 'Desglose de inventario'),
+            const Tab(text: 'Vales de Material'),
+            const Tab(text: 'Herramientas (deben volver)'),
+            const Tab(text: 'Placas y resguardos'),
           ],
         ),
       ),
@@ -107,7 +112,8 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
           builder: (context, _) => TabBarView(
             controller: _tabController,
             children: [
-              ContenidoResponsivo(anchoMaximo: 760, child: FormularioArticulo(onGuardado: () => _tabController.animateTo(1))),
+              if (Sesion.editaAlmacen)
+                ContenidoResponsivo(anchoMaximo: 760, child: FormularioArticulo(onGuardado: () => _tabController.animateTo(1))),
               _buildDesglose(),
               _buildValesMaterial(),
               _buildHerramientas(),
@@ -339,12 +345,14 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
                     DataCell(Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(icon: const Icon(Icons.edit_outlined, size: 18), tooltip: 'Editar', onPressed: () => _editarArticulo(a)),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.danger),
-                          tooltip: 'Eliminar',
-                          onPressed: () => _eliminarArticulo(a),
-                        ),
+                        if (Sesion.editaAlmacen) ...[
+                          IconButton(icon: const Icon(Icons.edit_outlined, size: 18), tooltip: 'Editar', onPressed: () => _editarArticulo(a)),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.danger),
+                            tooltip: 'Eliminar',
+                            onPressed: () => _eliminarArticulo(a),
+                          ),
+                        ],
                       ],
                     )),
                   ],
@@ -363,7 +371,9 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
       itemBuilder: (context, i) {
         final a = lista[i];
         final estado = _estado(a);
-        return Container(
+        return Aparicion(
+          indice: i,
+          child: Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: AppTheme.border)),
@@ -396,13 +406,16 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
                   ],
                 ),
               ),
-              IconButton(icon: const Icon(Icons.edit_outlined, size: 20), tooltip: 'Editar', onPressed: () => _editarArticulo(a)),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
-                tooltip: 'Eliminar',
-                onPressed: () => _eliminarArticulo(a),
-              ),
+              if (Sesion.editaAlmacen) ...[
+                IconButton(icon: const Icon(Icons.edit_outlined, size: 20), tooltip: 'Editar', onPressed: () => _editarArticulo(a)),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+                  tooltip: 'Eliminar',
+                  onPressed: () => _eliminarArticulo(a),
+                ),
+              ],
             ],
+          ),
           ),
         );
       },
@@ -605,6 +618,9 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          if (!Sesion.registraVales)
+            const AvisoSoloLectura('Consulta de vales de material. Solo Almacén, Proyectos y el Administrador pueden generarlos.')
+          else
           Form(
             key: _formMaterial,
             child: _tarjetaFormulario(
@@ -653,11 +669,12 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
                 detalle: '${v.id} • ${v.proyectoNombre}\n${formatearFechaHora(v.fecha)}${v.entregadoA.isEmpty ? '' : ' • Recibió: ${v.entregadoA}'}',
                 extra: Text(formatearDinero(v.total), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
                 acciones: [
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
-                    tooltip: 'Cancelar vale (regresa el material)',
-                    onPressed: () => _cancelarValeMaterial(v),
-                  ),
+                  if (Sesion.registraVales)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+                      tooltip: 'Cancelar vale (regresa el material)',
+                      onPressed: () => _cancelarValeMaterial(v),
+                    ),
                 ],
               ),
         ],
@@ -766,6 +783,9 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          if (!Sesion.registraVales)
+            const AvisoSoloLectura('Consulta de préstamos de herramienta. Solo Almacén, Proyectos y el Administrador pueden registrarlos.')
+          else
           Form(
             key: _formHerramienta,
             child: _tarjetaFormulario(
@@ -808,16 +828,18 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
                 detalle: '${v.id} • ${v.proyectoNombre}\nSalió ${formatearFechaHora(v.fechaSalida)} • Responsable: ${v.entregadoA}',
                 extra: const StatusBadge(label: 'DEBE VOLVER', type: BadgeType.warning),
                 acciones: [
-                  IconButton(
-                    icon: const Icon(Icons.assignment_return_outlined, size: 20, color: AppTheme.success),
-                    tooltip: 'Registrar devolución',
-                    onPressed: () => _registrarDevolucion(v),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
-                    tooltip: 'Eliminar vale',
-                    onPressed: () => _eliminarValeHerramienta(v),
-                  ),
+                  if (Sesion.registraVales) ...[
+                    IconButton(
+                      icon: const Icon(Icons.assignment_return_outlined, size: 20, color: AppTheme.success),
+                      tooltip: 'Registrar devolución',
+                      onPressed: () => _registrarDevolucion(v),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+                      tooltip: 'Eliminar vale',
+                      onPressed: () => _eliminarValeHerramienta(v),
+                    ),
+                  ],
                 ],
               ),
           _tituloLista('Historial de devoluciones', '${devueltas.length}'),
@@ -830,11 +852,12 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
                 titulo: '${v.unidad.formatear(v.cantidad)} • ${v.articuloNombre}',
                 detalle: '${v.id} • ${v.proyectoNombre}\nVolvió ${formatearFechaHora(v.fechaDevolucion!)} • ${v.estadoDevolucion}',
                 acciones: [
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
-                    tooltip: 'Eliminar del historial',
-                    onPressed: () => _eliminarValeHerramienta(v),
-                  ),
+                  if (Sesion.registraVales)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+                      tooltip: 'Eliminar del historial',
+                      onPressed: () => _eliminarValeHerramienta(v),
+                    ),
                 ],
               ),
         ],
@@ -921,6 +944,7 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
                   decoration: AppTheme.inputDecoration('Buscar empresa, unidad, operador...', icon: Icons.search),
                 ),
               ),
+              if (Sesion.editaAlmacen) ...[
               const SizedBox(width: 10),
               ElevatedButton.icon(
                 onPressed: () => mostrarFormularioResguardo(context),
@@ -932,6 +956,7 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
               ),
+              ],
             ],
           ),
           _tituloLista('En almacén', '${enAlmacen.length}'),
@@ -998,21 +1023,22 @@ class _AlmacenScreenState extends State<AlmacenScreen> with SingleTickerProvider
               ],
             ),
           ),
-          Column(
-            children: [
-              if (r.enAlmacen)
+          if (Sesion.editaAlmacen)
+            Column(
+              children: [
+                if (r.enAlmacen)
+                  IconButton(
+                    icon: const Icon(Icons.outbox_outlined, color: AppTheme.success),
+                    tooltip: 'Registrar salida de almacén',
+                    onPressed: () => _registrarSalida(r),
+                  ),
                 IconButton(
-                  icon: const Icon(Icons.outbox_outlined, color: AppTheme.success),
-                  tooltip: 'Registrar salida de almacén',
-                  onPressed: () => _registrarSalida(r),
+                  icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+                  tooltip: 'Eliminar',
+                  onPressed: () => _eliminarResguardo(r),
                 ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
-                tooltip: 'Eliminar',
-                onPressed: () => _eliminarResguardo(r),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );

@@ -5,6 +5,7 @@ import '../services/avisos_store.dart';
 import '../services/compras_store.dart';
 import '../services/sesion.dart';
 import '../utils/app_theme.dart';
+import '../utils/transiciones.dart';
 import '../views/almacen_screen.dart';
 import '../views/avisos_screen.dart';
 import '../views/compras_screen.dart';
@@ -42,11 +43,7 @@ class MenuLateral extends StatelessWidget {
     };
     // Reemplaza el apartado actual y conserva el menú principal debajo
     navegador.pushAndRemoveUntil(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => pantalla,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(opacity: animation, child: child),
-        transitionDuration: const Duration(milliseconds: 180),
-      ),
+      rutaSuave(pantalla, duracion: const Duration(milliseconds: 320)),
       (route) => route.isFirst,
     );
   }
@@ -101,7 +98,8 @@ class MenuLateral extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
-                  Text(rolesSistema[Sesion.rol] ?? Sesion.rol, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(Sesion.esAdmin || Sesion.esJefe ? (rolesSistema[Sesion.rol] ?? Sesion.rol) : Sesion.descripcionVista,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 ],
               ),
             ),
@@ -111,16 +109,18 @@ class MenuLateral extends StatelessWidget {
                 children: [
                   _opcion(context, null, 'Inicio', Icons.home_outlined, onTap: () => _inicio(context)),
                   const Divider(height: 16),
-                  if (Sesion.esAdmin) ...[
-                    _opcion(context, Seccion.usuarios, 'Usuarios', Icons.people_outline),
-                    _opcion(context, Seccion.departamentos, 'Departamentos', Icons.business_outlined),
+                  if (Sesion.gestionaUsuarios) _opcion(context, Seccion.usuarios, 'Usuarios', Icons.people_outline),
+                  if (Sesion.esAdmin) _opcion(context, Seccion.departamentos, 'Departamentos', Icons.business_outlined),
+                  // Solo las áreas que el usuario puede leer
+                  if (Sesion.veEvaluacion && Sesion.creaProyectos) _opcion(context, Seccion.evaluacion, 'Evaluación de Daños', Icons.fact_check_outlined),
+                  if (Sesion.veProyectos) ...[
+                    _opcion(context, Seccion.proyectosClientes, 'Proyectos de Clientes', Icons.folder_open),
+                    _opcion(context, Seccion.proyectosAseguradora, 'Proyectos de Aseguradora', Icons.verified_user_outlined),
                   ],
-                  _opcion(context, Seccion.evaluacion, 'Evaluación de Daños', Icons.fact_check_outlined),
-                  _opcion(context, Seccion.proyectosClientes, 'Proyectos de Clientes', Icons.folder_open),
-                  _opcion(context, Seccion.proyectosAseguradora, 'Proyectos de Aseguradora', Icons.verified_user_outlined),
-                  _opcion(context, Seccion.compras, 'Compras', Icons.shopping_bag_outlined, contador: ComprasStore.instancia.pendientes.length),
-                  _opcion(context, Seccion.almacen, 'Almacén', Icons.inventory_2_outlined),
-                  _opcion(context, Seccion.proveedores, 'Proveedores', Icons.storefront_outlined),
+                  if (Sesion.veCompras)
+                    _opcion(context, Seccion.compras, 'Compras', Icons.shopping_bag_outlined, contador: ComprasStore.instancia.pendientes.length),
+                  if (Sesion.veAlmacen) _opcion(context, Seccion.almacen, 'Almacén', Icons.inventory_2_outlined),
+                  if (Sesion.veCompras) _opcion(context, Seccion.proveedores, 'Proveedores', Icons.storefront_outlined),
                   const Divider(height: 16),
                   _opcion(context, Seccion.avisos, 'Avisos', Icons.notifications_none, contador: AvisosStore.instancia.noLeidos),
                 ],

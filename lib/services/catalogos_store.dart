@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/catalogos.dart';
+import '../utils/validaciones.dart';
 import 'api_client.dart';
 import 'sesion.dart';
 
@@ -15,7 +16,10 @@ class CatalogosStore extends ChangeNotifier {
   final List<UsuarioSistema> _usuarios = [];
   final List<Departamento> _departamentos = [];
 
-  List<UsuarioSistema> get usuarios => List.unmodifiable(_usuarios);
+  /// Con sesión real el backend ya filtra; en modo demo un jefe solo ve los usuarios de su área.
+  List<UsuarioSistema> get usuarios => List.unmodifiable(
+        Sesion.modoDemo && !Sesion.esAdmin ? _usuarios.where((u) => u.rol == 'Usuario' && u.area == Sesion.area) : _usuarios,
+      );
   List<Departamento> get departamentos => List.unmodifiable(_departamentos);
 
   Future<String?> cargar() async {
@@ -24,9 +28,9 @@ class CatalogosStore extends ChangeNotifier {
       _departamentos
         ..clear()
         ..addAll(deptos.map((j) => Departamento.fromJson(Map<String, dynamic>.from(j as Map))));
-      // La lista de usuarios solo la puede consultar el Admin
+      // Usuarios: el Admin ve todos; cada jefe solo los de su área (lo filtra el backend)
       _usuarios.clear();
-      if (Sesion.esAdmin) {
+      if (Sesion.gestionaUsuarios) {
         final usuarios = await _api.get('/Usuario') as List;
         _usuarios.addAll(usuarios.map((j) => UsuarioSistema.fromJson(Map<String, dynamic>.from(j as Map))));
       }
@@ -63,13 +67,24 @@ class CatalogosStore extends ChangeNotifier {
     required String rol,
     required String puesto,
     required String contacto,
+    String? area,
     String? password,
   }) async {
     if (nombre.trim().length < 3) return 'Ingresa el nombre completo.';
     if (username.trim().isEmpty) return 'Ingresa el nombre de usuario.';
-    if (existente == null && (password == null || password.length < 8)) return 'La contraseña debe tener al menos 8 caracteres.';
-    if (existente != null && password != null && password.isNotEmpty && password.length < 8) {
-      return 'La contraseña debe tener al menos 8 caracteres.';
+    final errorPassword = validarPassword(password, opcional: existente != null);
+    if (errorPassword != null) return errorPassword;
+
+    // Un jefe solo da de alta usuarios de su área; el Admin elige el área de los usuarios de rol 'Usuario'
+    if (!Sesion.esAdmin) {
+      rol = 'Usuario';
+      area = Sesion.area;
+    } else if (rol == 'Admin') {
+      area = null;
+    } else if (esRolJefe(rol)) {
+      area = areaDeRol(rol);
+    } else if (area == null) {
+      return 'Elige el área del usuario.';
     }
     final repetido = _usuarios.any((u) => !identical(u, existente) && u.username.toLowerCase() == username.trim().toLowerCase());
     if (repetido) return 'El usuario "$username" ya existe.';
@@ -81,6 +96,7 @@ class CatalogosStore extends ChangeNotifier {
         'rol': rol,
         'puestoTrabajo': puesto.trim(),
         'metodoContacto': contacto.trim(),
+        'area': area,
         if (password != null && password.isNotEmpty) 'password': password,
       };
       return _enApi(() => existente == null ? _api.post('/Usuario', cuerpo) : _api.put('/Usuario/${existente.id}', cuerpo));
@@ -88,12 +104,13 @@ class CatalogosStore extends ChangeNotifier {
 
     if (existente == null) {
       final id = _usuarios.isEmpty ? 1 : _usuarios.map((u) => u.id).reduce((a, b) => a > b ? a : b) + 1;
-      _usuarios.add(UsuarioSistema(id: id, nombre: nombre.trim(), username: username.trim(), rol: rol, puesto: puesto.trim(), contacto: contacto.trim()));
+      _usuarios.add(UsuarioSistema(id: id, nombre: nombre.trim(), username: username.trim(), rol: rol, puesto: puesto.trim(), contacto: contacto.trim(), area: area));
     } else {
       existente
         ..nombre = nombre.trim()
         ..username = username.trim()
         ..rol = rol
+        ..area = area
         ..puesto = puesto.trim()
         ..contacto = contacto.trim();
     }
@@ -145,7 +162,12 @@ class CatalogosStore extends ChangeNotifier {
       UsuarioSistema(id: 2, nombre: 'Gabriela Gómez', username: 'ggomez', rol: 'Almacen_Admin', puesto: 'Almacén'),
       UsuarioSistema(id: 3, nombre: 'Sergio Urey Morales', username: 'surey', rol: 'Proyecto_Lider', puesto: 'Proyectos'),
       UsuarioSistema(id: 4, nombre: 'Laura Ríos', username: 'lrios', rol: 'Evaluacion_Admin', puesto: 'Evaluación (Recepción)'),
+      UsuarioSistema(id: 5, nombre: 'Pedro Ruiz', username: 'pruiz', rol: 'Usuario', puesto: 'Hojalatero', area: 'Proyectos'),
+      UsuarioSistema(id: 6, nombre: 'Ana Torres', username: 'atorres', rol: 'Usuario', puesto: 'Auxiliar de almacén', area: 'Almacen'),
     ]);
+    for (final u in _usuarios) {
+      u.area ??= areaDeRol(u.rol);
+    }
     _departamentos.addAll([
       Departamento(id: 1, nombre: 'Proyectos', encargado: 'Sergio Urey Morales', icono: 'build', personal: 8),
       Departamento(id: 2, nombre: 'Compras', encargado: 'Carlos Martínez', icono: 'shopping', personal: 2),

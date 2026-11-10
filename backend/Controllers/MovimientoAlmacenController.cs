@@ -8,7 +8,7 @@ namespace Autozen.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // Leer: cualquier usuario autenticado. Escribir: Admin y jefe de Almacén
+[Authorize(Policy = Lectura.Almacen)] // Leer: Admin, jefes y usuarios del área de Almacén. Escribir: según cada acción
 public class MovimientoAlmacenController : ControllerBase
 {
     private readonly IMovimientoAlmacenRepository _movimientoalmacenRepository;

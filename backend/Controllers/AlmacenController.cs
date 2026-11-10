@@ -9,7 +9,7 @@ namespace Autozen.Api.Controllers;
 /// <summary>Catálogo del almacén, categorías y vales de salida de material.</summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Policy = Lectura.Almacen)] // Leer: Admin, jefes y usuarios del área de Almacén. Escribir: según cada acción
 public class AlmacenController : ControllerBase
 {
     private readonly AlmacenService _servicio;

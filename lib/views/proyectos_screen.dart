@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import '../models/proyecto_taller.dart';
 import '../services/almacen_store.dart';
 import '../services/proyectos_store.dart';
+import '../services/sesion.dart';
 import '../utils/app_theme.dart';
 import '../utils/formato_fecha.dart';
 import '../widgets/confirm_dialog.dart';
+import '../widgets/animaciones.dart';
 import '../widgets/contenido_responsivo.dart';
 import '../widgets/linea_etapas.dart';
 import '../widgets/status_badge.dart';
@@ -121,12 +123,15 @@ class _ProyectosScreenState extends State<ProyectosScreen> with SingleTickerProv
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _crearProyecto,
-        backgroundColor: AppTheme.primary,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Crear proyecto', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ),
+      // Crean proyectos (desde la Evaluación de Daños): Admin, Proyectos y Evaluación
+      floatingActionButton: Sesion.creaProyectos
+          ? FloatingActionButton.extended(
+              onPressed: _crearProyecto,
+              backgroundColor: AppTheme.primary,
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text('Crear proyecto', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            )
+          : null,
       body: ContenidoResponsivo(
         child: ListenableBuilder(
           listenable: Listenable.merge([_store, AlmacenStore.instancia]),
@@ -207,7 +212,7 @@ class _ProyectosScreenState extends State<ProyectosScreen> with SingleTickerProv
                     // Espacio inferior para que el botón flotante no tape la última tarjeta
                     padding: const EdgeInsets.only(bottom: 96),
                     itemCount: filtrados.length,
-                    itemBuilder: (context, index) => _buildTarjeta(filtrados[index]),
+                    itemBuilder: (context, index) => Aparicion(indice: index, child: _buildTarjeta(filtrados[index])),
                   ),
           ),
         ],
@@ -233,7 +238,7 @@ class _ProyectosScreenState extends State<ProyectosScreen> with SingleTickerProv
             Icon(archivados ? Icons.inventory_2_outlined : Icons.local_shipping_outlined, size: 54, color: Colors.grey.shade400),
             const SizedBox(height: 12),
             Text(mensaje, textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.textSecondary)),
-            if (!archivados && !hayProyectos) ...[
+            if (!archivados && !hayProyectos && Sesion.creaProyectos) ...[
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: _crearProyecto,
@@ -318,7 +323,9 @@ class _ProyectosScreenState extends State<ProyectosScreen> with SingleTickerProv
                 ),
               ),
               const SizedBox(width: 4),
-              if (proyecto.archivado)
+              if (!Sesion.editaProyectos)
+                const SizedBox.shrink()
+              else if (proyecto.archivado)
                 IconButton(
                   icon: const Icon(Icons.restore, color: AppTheme.textSecondary),
                   tooltip: 'Restaurar a activos',
@@ -370,9 +377,9 @@ class _ProyectosScreenState extends State<ProyectosScreen> with SingleTickerProv
                 context,
                 MaterialPageRoute(builder: (context) => DetalleProyectoScreen(proyecto: proyecto)),
               ),
-              icon: Icon(proyecto.archivado ? Icons.visibility_outlined : Icons.tune_outlined, size: 18, color: AppTheme.primary),
+              icon: Icon(proyecto.archivado || !Sesion.editaProyectos ? Icons.visibility_outlined : Icons.tune_outlined, size: 18, color: AppTheme.primary),
               label: Text(
-                proyecto.archivado ? 'Ver detalle' : 'Gestionar unidad y etapas',
+                proyecto.archivado || !Sesion.editaProyectos ? 'Ver detalle' : 'Gestionar unidad y etapas',
                 style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 13),
               ),
               style: OutlinedButton.styleFrom(

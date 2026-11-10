@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/compras.dart';
 import '../services/compras_store.dart';
+import '../services/sesion.dart';
 import '../utils/app_theme.dart';
 import '../utils/formato_fecha.dart';
+import '../widgets/animaciones.dart';
 import '../widgets/contenido_responsivo.dart';
 import '../widgets/formulario_solicitud_compra.dart';
 import '../widgets/status_badge.dart';
@@ -61,12 +63,15 @@ class _ComprasScreenState extends State<ComprasScreen> with SingleTickerProvider
               ],
             ),
           ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => mostrarSolicitudCompra(context),
-            backgroundColor: AppTheme.primary,
-            icon: const Icon(Icons.add_shopping_cart, color: Colors.white),
-            label: const Text('Nueva solicitud', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
+          // Solicitan compras: Admin, Compras y Proyectos
+          floatingActionButton: Sesion.solicitaCompras
+              ? FloatingActionButton.extended(
+                  onPressed: () => mostrarSolicitudCompra(context),
+                  backgroundColor: AppTheme.primary,
+                  icon: const Icon(Icons.add_shopping_cart, color: Colors.white),
+                  label: const Text('Nueva solicitud', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                )
+              : null,
           body: ContenidoResponsivo(
             child: TabBarView(
               controller: _tabController,
@@ -138,7 +143,7 @@ class _ComprasScreenState extends State<ComprasScreen> with SingleTickerProvider
             child: Center(child: Text(vacio, style: const TextStyle(color: AppTheme.textSecondary))),
           )
         else
-          for (final s in lista) _buildTarjeta(s),
+          for (final (i, s) in lista.indexed) Aparicion(indice: i, child: _buildTarjeta(s)),
       ],
     );
   }

@@ -99,6 +99,19 @@ class AlmacenStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Deja el store vacío (el usuario no tiene acceso a esta área).
+  void vaciar() {
+    _categorias.clear();
+    _idCategoria.clear();
+    _articulos.clear();
+    _valesMaterial.clear();
+    _valesHerramienta.clear();
+    _resguardos.clear();
+    _consecutivoArticulo = 0;
+    _consecutivoVale = 0;
+    notifyListeners();
+  }
+
   /// Ejecuta una operación contra la API y, si sale bien, recarga el almacén.
   Future<String?> _enApi(Future<dynamic> Function() llamada) async {
     try {

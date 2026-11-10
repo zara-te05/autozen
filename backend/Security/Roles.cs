@@ -45,3 +45,68 @@ public static class Politicas
     public const string AltaUsuarios = "AltaUsuarios";
     public const string Login = "Login";
 }
+
+/// <summary>
+/// Áreas (departamentos) del taller. Cada jefe pertenece al área de su rol y cada usuario con rol
+/// 'Usuario' pertenece al área del jefe que lo dio de alta. El Admin no tiene área: ve todo.
+/// </summary>
+public static class Areas
+{
+    public const string Proyectos = "Proyectos";
+    public const string Compras = "Compras";
+    public const string Almacen = "Almacen";
+    public const string Evaluacion = "Evaluacion";
+
+    public static readonly string[] Todas = [Proyectos, Compras, Almacen, Evaluacion];
+
+    /// <summary>Nombre del claim del JWT con el área del usuario.</summary>
+    public const string Claim = "area";
+
+    /// <summary>Área que le corresponde a un rol de jefe; null para Admin y Usuario.</summary>
+    public static string? DeRol(string? rol) => rol switch
+    {
+        Roles.ProyectoLider => Proyectos,
+        Roles.ComprasAdmin => Compras,
+        Roles.AlmacenAdmin => Almacen,
+        Roles.EvaluacionAdmin => Evaluacion,
+        _ => null,
+    };
+
+    public static string? Normalizar(string? area) =>
+        string.IsNullOrWhiteSpace(area) ? null : Todas.FirstOrDefault(a => a.Equals(area.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    public static bool EsJefe(string? rol) => DeRol(rol) is not null;
+}
+
+/// <summary>
+/// Políticas de LECTURA por área:
+/// - Admin y jefes de departamento: leen todas las áreas.
+/// - Rol 'Usuario': solo lee su propia área (claim "area").
+/// La ESCRITURA sigue limitada por <see cref="Edicion"/> (cada jefe en su área; Admin en todo).
+/// </summary>
+public static class Lectura
+{
+    public const string Proyectos = "Leer_Proyectos";
+    public const string Compras = "Leer_Compras";
+    public const string Almacen = "Leer_Almacen";
+    public const string Evaluacion = "Leer_Evaluacion";
+
+    /// <summary>Qué áreas de usuario pueden leer cada política. La evaluación de daños vive dentro del proyecto.</summary>
+    public static readonly IReadOnlyDictionary<string, string[]> AreasPorPolitica = new Dictionary<string, string[]>
+    {
+        [Proyectos] = [Areas.Proyectos, Areas.Evaluacion],
+        [Evaluacion] = [Areas.Evaluacion, Areas.Proyectos],
+        [Compras] = [Areas.Compras],
+        [Almacen] = [Areas.Almacen],
+    };
+
+    public static bool Permite(System.Security.Claims.ClaimsPrincipal usuario, string[] areas)
+    {
+        if (usuario.Identity?.IsAuthenticated != true) return false;
+        if (usuario.IsInRole(Roles.Admin)) return true;
+        if (usuario.IsInRole(Roles.ProyectoLider) || usuario.IsInRole(Roles.ComprasAdmin) ||
+            usuario.IsInRole(Roles.AlmacenAdmin) || usuario.IsInRole(Roles.EvaluacionAdmin)) return true;
+        var area = usuario.FindFirst(Areas.Claim)?.Value;
+        return area is not null && areas.Contains(area);
+    }
+}

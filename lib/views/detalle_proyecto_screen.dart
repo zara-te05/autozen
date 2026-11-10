@@ -6,6 +6,7 @@ import '../services/almacen_store.dart';
 import '../services/compras_store.dart';
 import '../services/fotos_service.dart';
 import '../services/proyectos_store.dart';
+import '../services/sesion.dart';
 import '../utils/app_theme.dart';
 import '../utils/formato_fecha.dart';
 import '../widgets/confirm_dialog.dart';
@@ -86,7 +87,7 @@ class _DetalleProyectoScreenState extends State<DetalleProyectoScreen> {
           appBar: AppBar(
             title: const Text('Detalle de unidad'),
             actions: [
-              if (!_p.archivado)
+              if (!_p.archivado && Sesion.editaProyectos)
                 IconButton(
                   icon: const Icon(Icons.edit_outlined),
                   tooltip: 'Editar camión y etapas',
@@ -131,8 +132,8 @@ class _DetalleProyectoScreenState extends State<DetalleProyectoScreen> {
                     ],
                   ),
                 ),
-                // Botón fijo abajo, fuera de la lista: no tapa contenido
-                if (!_p.archivado)
+                // Botón fijo abajo, fuera de la lista: no tapa contenido. Solicitan compras: Admin, Proyectos y Compras
+                if (!_p.archivado && Sesion.solicitaCompras)
                   SafeArea(
                     top: false,
                     child: Padding(
@@ -176,9 +177,13 @@ class _DetalleProyectoScreenState extends State<DetalleProyectoScreen> {
         children: [
           const Icon(Icons.inventory_2_outlined, color: AppTheme.warning),
           const SizedBox(width: 10),
-          const Expanded(
-            child: Text('Este proyecto está archivado. Restáuralo para editarlo.', style: TextStyle(fontSize: 13)),
+          Expanded(
+            child: Text(
+              Sesion.editaProyectos ? 'Este proyecto está archivado. Restáuralo para editarlo.' : 'Este proyecto está archivado.',
+              style: const TextStyle(fontSize: 13),
+            ),
           ),
+          if (Sesion.editaProyectos)
           TextButton(
             onPressed: () async {
               final error = await _store.restaurar(_p);
@@ -319,7 +324,7 @@ class _DetalleProyectoScreenState extends State<DetalleProyectoScreen> {
               const Expanded(
                 child: Text('Avance de etapas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textPrimary)),
               ),
-              if (!_p.archivado)
+              if (!_p.archivado && Sesion.editaProyectos)
                 TextButton.icon(
                   onPressed: _editar,
                   icon: const Icon(Icons.edit_outlined, size: 16),
@@ -329,12 +334,14 @@ class _DetalleProyectoScreenState extends State<DetalleProyectoScreen> {
           ),
           const SizedBox(height: 12),
           LineaEtapas(etapas: _p.etapas, etapaActual: _p.etapaActual),
+          // Avanzar etapas: solo Proyectos y el Admin
+          if (Sesion.editaProyectos || _p.terminado) ...[
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             height: 44,
             child: ElevatedButton.icon(
-              onPressed: !_p.terminado && !_p.archivado ? _avanzarEtapa : null,
+              onPressed: !_p.terminado && !_p.archivado && Sesion.editaProyectos ? _avanzarEtapa : null,
               icon: Icon(_p.terminado ? Icons.check_circle : Icons.arrow_circle_right_outlined, color: Colors.white, size: 18),
               label: Text(
                 _p.terminado
@@ -354,6 +361,7 @@ class _DetalleProyectoScreenState extends State<DetalleProyectoScreen> {
               ),
             ),
           ),
+          ],
         ],
       ),
     );
@@ -634,7 +642,7 @@ class _DetalleProyectoScreenState extends State<DetalleProyectoScreen> {
           const SizedBox(height: 12),
           GaleriaFotos(
             fotos: _p.fotos,
-            editable: !_p.archivado,
+            editable: !_p.archivado && Sesion.creaProyectos,
             onAgregada: _agregarFoto,
             onQuitada: _quitarFoto,
           ),
@@ -717,7 +725,7 @@ class _DetalleProyectoScreenState extends State<DetalleProyectoScreen> {
                 CheckboxListTile(
                   value: _tareas[i]['completado'] as bool,
                   activeColor: AppTheme.primary,
-                  onChanged: _p.archivado ? null : (val) => setState(() => _tareas[i]['completado'] = val ?? false),
+                  onChanged: _p.archivado || !Sesion.editaProyectos ? null : (val) => setState(() => _tareas[i]['completado'] = val ?? false),
                   title: Text(
                     _tareas[i]['titulo'] as String,
                     style: TextStyle(

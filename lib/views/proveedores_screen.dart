@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/proveedor.dart';
 import '../services/proveedores_store.dart';
+import '../services/sesion.dart';
 import '../utils/app_theme.dart';
 import '../widgets/confirm_dialog.dart';
+import '../widgets/animaciones.dart';
 import '../widgets/contenido_responsivo.dart';
 import '../widgets/menu_lateral.dart';
 
@@ -59,12 +61,15 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
       backgroundColor: AppTheme.background,
       drawer: const MenuLateral(seccion: Seccion.proveedores),
       appBar: AppBar(title: const Text('Proveedores')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _abrirFormulario(),
-        backgroundColor: AppTheme.primary,
-        icon: const Icon(Icons.add_business_outlined, color: Colors.white),
-        label: const Text('Nuevo proveedor', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ),
+      // Proveedores: solo Compras y el Admin
+      floatingActionButton: Sesion.editaCompras
+          ? FloatingActionButton.extended(
+              onPressed: () => _abrirFormulario(),
+              backgroundColor: AppTheme.primary,
+              icon: const Icon(Icons.add_business_outlined, color: Colors.white),
+              label: const Text('Nuevo proveedor', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            )
+          : null,
       body: ContenidoResponsivo(
         child: ListenableBuilder(
           listenable: _store,
@@ -99,7 +104,7 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
                         : ListView.builder(
                             padding: const EdgeInsets.only(bottom: 96),
                             itemCount: lista.length,
-                            itemBuilder: (context, i) => _buildTarjeta(lista[i]),
+                            itemBuilder: (context, i) => Aparicion(indice: i, child: _buildTarjeta(lista[i])),
                           ),
                   ),
                 ],
@@ -156,12 +161,14 @@ class _ProveedoresScreenState extends State<ProveedoresScreen> {
               ],
             ),
           ),
-          IconButton(icon: const Icon(Icons.edit_outlined, size: 20), tooltip: 'Editar', onPressed: () => _abrirFormulario(p)),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
-            tooltip: 'Eliminar',
-            onPressed: () => _eliminar(p),
-          ),
+          if (Sesion.editaCompras) ...[
+            IconButton(icon: const Icon(Icons.edit_outlined, size: 20), tooltip: 'Editar', onPressed: () => _abrirFormulario(p)),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.textMuted),
+              tooltip: 'Eliminar',
+              onPressed: () => _eliminar(p),
+            ),
+          ],
         ],
       ),
     );

@@ -1,35 +1,42 @@
 import 'package:flutter/material.dart';
 import '../models/tablero.dart';
+import '../services/proyectos_store.dart';
 import '../services/sesion.dart';
 import '../services/tablero_store.dart';
 import '../utils/app_theme.dart';
 import '../utils/formato_fecha.dart';
+import 'animaciones.dart';
 import 'confirm_dialog.dart';
 
 /// Tablero que aparece arriba de las tarjetas del dashboard:
-/// 1. Programación de entregas de unidades de la semana.
+/// 1. Programación de entregas de unidades de la semana (salen de los proyectos; el Admin agrega o quita).
 /// 2. Coordinación operativa del día (post-its; se borran a las 7 pm).
 /// 3. Anuncios.
-/// Todos lo ven; solo el Admin puede agregar, editar y eliminar.
+/// Todos lo ven; solo el Admin puede agregar, editar, eliminar y quitar proyectos del tablero.
 class TableroInicio extends StatelessWidget {
   const TableroInicio({super.key});
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: TableroStore.instancia,
+      // En modo demo las entregas se calculan de los proyectos en memoria
+      listenable: Listenable.merge([TableroStore.instancia, ProyectosStore.instancia]),
       builder: (context, _) {
         final store = TableroStore.instancia;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _SeccionEntregas(entregas: store.entregas),
+            // Las secciones entran una tras otra al abrir el dashboard
+            Aparicion(indice: 0, child: _SeccionEntregas(entregas: store.entregas)),
             const SizedBox(height: 24),
-            _SeccionCoordinacion(notas: store.coordinacion),
+            Aparicion(indice: 1, child: _SeccionCoordinacion(notas: store.coordinacion)),
             const SizedBox(height: 24),
-            _SeccionAnuncios(anuncios: store.anuncios),
+            Aparicion(indice: 2, child: _SeccionAnuncios(anuncios: store.anuncios)),
             const SizedBox(height: 28),
-            const Text('Áreas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+            const Aparicion(
+              indice: 3,
+              child: Text('Áreas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+            ),
             const SizedBox(height: 12),
           ],
         );
@@ -129,7 +136,17 @@ class _MenuAdmin extends StatelessWidget {
   final void Function(String)? onExtra;
   final Color? color;
 
-  const _MenuAdmin({required this.onEditar, required this.onEliminar, this.extras = const [], this.onExtra, this.color});
+  /// Sin "Editar" ni "Eliminar" (p. ej. entregas que salen de un proyecto).
+  final bool soloExtras;
+
+  const _MenuAdmin({
+    required this.onEditar,
+    required this.onEliminar,
+    this.extras = const [],
+    this.onExtra,
+    this.color,
+    this.soloExtras = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -149,11 +166,13 @@ class _MenuAdmin extends StatelessWidget {
       },
       itemBuilder: (_) => [
         ...extras,
-        const PopupMenuItem(value: 'editar', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar'), dense: true, contentPadding: EdgeInsets.zero)),
-        const PopupMenuItem(
-          value: 'eliminar',
-          child: ListTile(leading: Icon(Icons.delete_outline, color: AppTheme.danger), title: Text('Eliminar', style: TextStyle(color: AppTheme.danger)), dense: true, contentPadding: EdgeInsets.zero),
-        ),
+        if (!soloExtras) ...[
+          const PopupMenuItem(value: 'editar', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar'), dense: true, contentPadding: EdgeInsets.zero)),
+          const PopupMenuItem(
+            value: 'eliminar',
+            child: ListTile(leading: Icon(Icons.delete_outline, color: AppTheme.danger), title: Text('Eliminar', style: TextStyle(color: AppTheme.danger)), dense: true, contentPadding: EdgeInsets.zero),
+          ),
+        ],
       ],
     );
   }
@@ -184,35 +203,39 @@ class _SeccionEntregas extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pendientes = entregas.where((e) => !e.entregada).length;
+    final visibles = entregas.where((e) => !e.oculta).toList();
+    final pendientes = visibles.where((e) => !e.entregada).length;
+    final ocultas = entregas.length - visibles.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _EncabezadoSeccion(
           icono: Icons.local_shipping_outlined,
           titulo: 'Entregas de la semana',
-          subtitulo: '${_rangoSemana()} · ${entregas.isEmpty ? 'sin unidades programadas' : '$pendientes pendiente${pendientes == 1 ? '' : 's'} de ${entregas.length}'}',
+          subtitulo: '${_rangoSemana()} · ${visibles.isEmpty ? 'sin unidades por entregar' : '$pendientes pendiente${pendientes == 1 ? '' : 's'} de ${visibles.length}'}'
+              '${ocultas > 0 ? ' · $ocultas quitada${ocultas == 1 ? '' : 's'} del tablero' : ''}',
           textoAgregar: 'Agregar',
           onAgregar: () => _editarEntrega(context, null),
         ),
-        if (entregas.isEmpty)
-          const _Vacio('No hay unidades programadas para entregarse esta semana.')
-        else
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 15, offset: const Offset(0, 8))],
-            ),
-            child: Column(
-              children: [
-                for (var i = 0; i < entregas.length; i++) ...[
-                  if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
-                  _FilaEntrega(entrega: entregas[i]),
-                ],
-              ],
-            ),
-          ),
+        CambioSuave(
+          child: entregas.isEmpty
+              ? const _Vacio('Ningún proyecto se entrega esta semana.')
+              : Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 15, offset: const Offset(0, 8))],
+                  ),
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < entregas.length; i++) ...[
+                        if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
+                        _FilaEntrega(key: ValueKey('${entregas[i].origen}-${entregas[i].id}'), entrega: entregas[i]),
+                      ],
+                    ],
+                  ),
+                ),
+        ),
       ],
     );
   }
@@ -220,7 +243,7 @@ class _SeccionEntregas extends StatelessWidget {
 
 class _FilaEntrega extends StatelessWidget {
   final EntregaSemana entrega;
-  const _FilaEntrega({required this.entrega});
+  const _FilaEntrega({super.key, required this.entrega});
 
   @override
   Widget build(BuildContext context) {
@@ -228,8 +251,10 @@ class _FilaEntrega extends StatelessWidget {
     final esHoy = entrega.fechaEntrega == hoy;
     final atrasada = !entrega.entregada && entrega.fechaEntrega.isBefore(hoy);
 
-    final (String estado, Color colorEstado) = entrega.entregada
-        ? ('Entregada', AppTheme.success)
+    final (String estado, Color colorEstado) = entrega.oculta
+        ? ('Quitada', AppTheme.textMuted)
+        : entrega.entregada
+        ? (entrega.esProyecto ? 'Terminado' : 'Entregada', AppTheme.success)
         : atrasada
             ? ('Atrasada', AppTheme.danger)
             : esHoy
@@ -237,85 +262,115 @@ class _FilaEntrega extends StatelessWidget {
                 : ('Pendiente', AppTheme.info);
 
     final detalle = [
+      if (entrega.codigo != null) entrega.codigo!,
       if (entrega.cliente != null && entrega.cliente!.isNotEmpty) entrega.cliente!,
       if (entrega.notas != null && entrega.notas!.isNotEmpty) entrega.notas!,
     ].join(' · ');
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-      child: Row(
-        children: [
-          // Día de entrega
-          Container(
-            width: 52,
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            decoration: BoxDecoration(
-              color: esHoy ? AppTheme.primary : AppTheme.background,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Text(_dias[entrega.fechaEntrega.weekday - 1],
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: esHoy ? Colors.white70 : AppTheme.textSecondary)),
-                Text('${entrega.fechaEntrega.day}',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: esHoy ? Colors.white : AppTheme.textPrimary)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  entrega.unidad,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: entrega.entregada ? AppTheme.textMuted : AppTheme.textPrimary,
-                    decoration: entrega.entregada ? TextDecoration.lineThrough : null,
+    final menuAdmin = !Sesion.esAdmin
+        ? const SizedBox(width: 8)
+        : entrega.esProyecto
+            // Las entregas de proyectos no se editan aquí (se editan en el proyecto): solo se quitan o regresan
+            ? _MenuAdmin(
+                soloExtras: true,
+                extras: [
+                  PopupMenuItem(
+                    value: 'ocultar',
+                    child: ListTile(
+                      leading: Icon(entrega.oculta ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                      title: Text(entrega.oculta ? 'Regresar al tablero' : 'Quitar del tablero'),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
-                ),
-                if (detalle.isNotEmpty)
-                  Text(detalle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(color: colorEstado.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-            child: Text(estado, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorEstado)),
-          ),
-          if (Sesion.esAdmin)
-            _MenuAdmin(
-              extras: [
-                PopupMenuItem(
-                  value: 'entregada',
-                  child: ListTile(
-                    leading: Icon(entrega.entregada ? Icons.undo : Icons.check_circle_outline),
-                    title: Text(entrega.entregada ? 'Marcar pendiente' : 'Marcar entregada'),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
+                ],
+                onExtra: (_) async {
+                  final store = TableroStore.instancia;
+                  final error = await (entrega.oculta ? store.mostrarProyecto(entrega) : store.ocultarProyecto(entrega));
+                  if (context.mounted) {
+                    _mostrarResultado(context, error, entrega.oculta ? 'Proyecto regresado al tablero.' : 'Proyecto quitado del tablero.');
+                  }
+                },
+                onEditar: () {},
+                onEliminar: () {},
+              )
+            : _MenuAdmin(
+                extras: [
+                  PopupMenuItem(
+                    value: 'entregada',
+                    child: ListTile(
+                      leading: Icon(entrega.entregada ? Icons.undo : Icons.check_circle_outline),
+                      title: Text(entrega.entregada ? 'Marcar pendiente' : 'Marcar entregada'),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
-                ),
-              ],
-              onExtra: (_) async {
-                final error = await TableroStore.instancia.marcarEntregada(entrega, !entrega.entregada);
-                if (context.mounted && error != null) _mostrarResultado(context, error, '');
-              },
-              onEditar: () => _editarEntrega(context, entrega),
-              onEliminar: () async {
-                if (!await _confirmarEliminar(context, 'esta entrega')) return;
-                final error = await TableroStore.instancia.eliminarEntrega(entrega);
-                if (context.mounted) _mostrarResultado(context, error, 'Entrega eliminada.');
-              },
-            )
-          else
+                ],
+                onExtra: (_) async {
+                  final error = await TableroStore.instancia.marcarEntregada(entrega, !entrega.entregada);
+                  if (context.mounted && error != null) _mostrarResultado(context, error, '');
+                },
+                onEditar: () => _editarEntrega(context, entrega),
+                onEliminar: () async {
+                  if (!await _confirmarEliminar(context, 'esta entrega')) return;
+                  final error = await TableroStore.instancia.eliminarEntrega(entrega);
+                  if (context.mounted) _mostrarResultado(context, error, 'Entrega eliminada.');
+                },
+              );
+
+    return Opacity(
+      opacity: entrega.oculta ? 0.5 : 1,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+        child: Row(
+          children: [
+            // Día de entrega
+            Container(
+              width: 52,
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              decoration: BoxDecoration(
+                color: esHoy ? AppTheme.primary : AppTheme.background,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Text(_dias[entrega.fechaEntrega.weekday - 1],
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: esHoy ? Colors.white70 : AppTheme.textSecondary)),
+                  Text('${entrega.fechaEntrega.day}',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: esHoy ? Colors.white : AppTheme.textPrimary)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entrega.unidad,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: entrega.entregada ? AppTheme.textMuted : AppTheme.textPrimary,
+                      decoration: entrega.entregada ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                  if (detalle.isNotEmpty)
+                    Text(detalle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                ],
+              ),
+            ),
             const SizedBox(width: 8),
-        ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: colorEstado.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+              child: Text(estado, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorEstado)),
+            ),
+            menuAdmin,
+          ],
+        ),
       ),
     );
   }
@@ -461,10 +516,10 @@ class _SeccionCoordinacion extends StatelessWidget {
           textoAgregar: 'Nota',
           onAgregar: () => _editarNota(context, null),
         ),
-        if (notas.isEmpty)
-          const _Vacio('Todavía no hay cuadrillas asignadas para hoy.')
-        else
-          LayoutBuilder(
+        CambioSuave(
+          child: notas.isEmpty
+              ? const _Vacio('Todavía no hay cuadrillas asignadas para hoy.')
+              : LayoutBuilder(
             builder: (context, constraints) {
               // 2 post-its por fila en teléfono; más en pantallas anchas
               const espacio = 12.0;
@@ -473,10 +528,14 @@ class _SeccionCoordinacion extends StatelessWidget {
               return Wrap(
                 spacing: espacio,
                 runSpacing: espacio,
-                children: [for (final n in notas) SizedBox(width: ancho, child: _PostIt(nota: n))],
+                // Con llave: una nota nueva entra con animación y las demás no se repiten
+                children: [
+                  for (final n in notas) SizedBox(key: ValueKey(n.id), width: ancho, child: Aparicion(child: _PostIt(nota: n))),
+                ],
               );
             },
           ),
+        ),
       ],
     );
   }
@@ -666,13 +725,20 @@ class _SeccionAnuncios extends StatelessWidget {
           textoAgregar: 'Anuncio',
           onAgregar: () => _editarAnuncio(context, null),
         ),
-        if (anuncios.isEmpty)
-          const _Vacio('No hay anuncios.')
-        else
-          for (final a in anuncios) ...[
-            _TarjetaAnuncio(anuncio: a),
-            const SizedBox(height: 10),
-          ],
+        CambioSuave(
+          child: anuncios.isEmpty
+              ? const _Vacio('No hay anuncios.')
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final a in anuncios)
+                      Aparicion(
+                        key: ValueKey(a.id),
+                        child: Padding(padding: const EdgeInsets.only(bottom: 10), child: _TarjetaAnuncio(anuncio: a)),
+                      ),
+                  ],
+                ),
+        ),
       ],
     );
   }

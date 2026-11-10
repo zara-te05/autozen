@@ -8,7 +8,7 @@ namespace Autozen.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // Leer: cualquier usuario autenticado. Escribir: Admin y jefe de Evaluación
+[Authorize(Policy = Lectura.Evaluacion)] // Leer: Admin, jefes y usuarios del área de Evaluación (y Proyectos). Escribir: según cada acción
 public class ClienteController : ControllerBase
 {
     private readonly IClienteRepository _clienteRepository;

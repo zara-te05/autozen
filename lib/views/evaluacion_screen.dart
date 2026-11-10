@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import '../models/proyecto_taller.dart';
 import '../services/fotos_service.dart';
 import '../services/proyectos_store.dart';
+import '../services/sesion.dart';
 import '../utils/app_theme.dart';
 import '../utils/formateadores.dart';
 import '../utils/formato_fecha.dart';
+import '../widgets/aviso_solo_lectura.dart';
 import '../widgets/contenido_responsivo.dart';
 import '../widgets/galeria_fotos.dart';
 import '../widgets/safe_number_picker.dart';
@@ -193,7 +195,14 @@ class _EvaluacionScreenState extends State<EvaluacionScreen> {
       appBar: AppBar(title: const Text('Evaluación de Daños')),
       body: ContenidoResponsivo(
         anchoMaximo: 760,
-        child: Form(
+        // Solo quien puede crear proyectos llena la evaluación (Admin, Proyectos y Evaluación)
+        child: !Sesion.creaProyectos
+            ? const Padding(
+                padding: EdgeInsets.all(20),
+                child: AvisoSoloLectura(
+                    'Tu perfil no puede registrar evaluaciones. Consulta las evaluaciones en el detalle de cada proyecto.'),
+              )
+            : Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),

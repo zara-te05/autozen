@@ -106,6 +106,12 @@ builder.Services.AddAuthorization(options =>
     // Pueden dar de alta usuarios el Admin y los jefes de departamento
     options.AddPolicy(Politicas.AltaUsuarios, policy =>
         policy.RequireRole(Roles.Admin, Roles.ProyectoLider, Roles.ComprasAdmin, Roles.AlmacenAdmin, Roles.EvaluacionAdmin));
+
+    // Lectura por área: Admin y jefes leen todo; un 'Usuario' solo lee su área
+    foreach (var (politica, areas) in Lectura.AreasPorPolitica)
+    {
+        options.AddPolicy(politica, policy => policy.RequireAssertion(contexto => Lectura.Permite(contexto.User, areas)));
+    }
 });
 
 // Rate limiting: máximo 5 intentos de login por minuto por IP

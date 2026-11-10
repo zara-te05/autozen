@@ -8,7 +8,7 @@ namespace Autozen.Api.Controllers;
 /// <summary>Préstamos de herramienta: salen del almacén y deben regresar.</summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Policy = Lectura.Almacen)] // Leer: Admin, jefes y usuarios del área de Almacén. Escribir: según cada acción
 public class HerramientasController : ControllerBase
 {
     private readonly HerramientasService _servicio;

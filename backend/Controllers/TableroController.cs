@@ -9,6 +9,7 @@ namespace Autozen.Api.Controllers;
 /// <summary>
 /// Tablero de inicio: entregas de la semana, coordinación operativa del día y anuncios.
 /// Cualquier usuario autenticado lo lee; solo el Admin crea, edita y elimina.
+/// Las entregas de la semana salen de los proyectos existentes; el Admin puede agregar entregas manuales o quitar proyectos.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -22,7 +23,7 @@ public class TableroController : ControllerBase
     private string? Usuario => User.FindFirstValue("nombre") is { Length: > 0 } nombre ? nombre : User.Identity?.Name;
 
     [HttpGet]
-    public async Task<ActionResult<TableroDto>> Obtener() => Ok(await _servicio.ObtenerAsync());
+    public async Task<ActionResult<TableroDto>> Obtener() => Ok(await _servicio.ObtenerAsync(User.IsInRole(Roles.Admin)));
 
     // ---------- Entregas de la semana ----------
 
@@ -41,6 +42,24 @@ public class TableroController : ControllerBase
     public async Task<IActionResult> EliminarEntrega(int id)
     {
         await _servicio.EliminarEntregaAsync(id);
+        return NoContent();
+    }
+
+    /// <summary>Quita del tablero un proyecto que está por entregarse.</summary>
+    [HttpPost("entregas/proyecto/{proyectoId:int}/ocultar")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<IActionResult> OcultarProyecto(int proyectoId)
+    {
+        await _servicio.OcultarProyectoAsync(proyectoId, Usuario);
+        return NoContent();
+    }
+
+    /// <summary>Regresa al tablero un proyecto que se había quitado.</summary>
+    [HttpDelete("entregas/proyecto/{proyectoId:int}/ocultar")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<IActionResult> MostrarProyecto(int proyectoId)
+    {
+        await _servicio.MostrarProyectoAsync(proyectoId);
         return NoContent();
     }
 

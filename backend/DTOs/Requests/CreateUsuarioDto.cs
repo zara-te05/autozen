@@ -9,4 +9,5 @@ public class CreateUsuarioDto
     public string Password {get; set;} = default!;
     public string? PuestoTrabajo { get; set; } = default!;
     public string? MetodoContacto { get; set; } = default!;
+    public string? Area { get; set; }
 }

@@ -9,4 +9,5 @@ public class UsuarioDetalleResponseDto
     public string? PuestoTrabajo { get; set; }
     public int? TrabajadorId { get; set; }
     public string? MetodoContacto { get; set; }
+    public string? Area { get; set; }
 }

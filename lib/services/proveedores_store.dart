@@ -38,6 +38,12 @@ class ProveedoresStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Deja el store vacío (el usuario no tiene acceso a esta área).
+  void vaciar() {
+    _proveedores.clear();
+    notifyListeners();
+  }
+
   /// Crea (si [existente] es null) o actualiza un proveedor. Devuelve un mensaje de error, o null si se guardó.
   Future<String?> guardar({
     Proveedor? existente,

@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/catalogos.dart';
 import '../services/catalogos_store.dart';
+import '../services/sesion.dart';
 import '../utils/app_theme.dart';
+import '../utils/validaciones.dart';
 import '../widgets/confirm_dialog.dart';
+import '../widgets/animaciones.dart';
 import '../widgets/contenido_responsivo.dart';
 import '../widgets/menu_lateral.dart';
 
-/// Alta, edición y baja de usuarios del sistema (solo Admin).
+/// Alta, edición y baja de usuarios.
+/// - Admin: todos los usuarios y roles.
+/// - Jefe de departamento: solo usuarios de su área (rol 'Usuario', solo lectura de esa área).
 class UsuariosScreen extends StatefulWidget {
   const UsuariosScreen({super.key});
 
@@ -48,7 +54,7 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       drawer: const MenuLateral(seccion: Seccion.usuarios),
-      appBar: AppBar(title: const Text('Usuarios')),
+      appBar: AppBar(title: Text(Sesion.esAdmin ? 'Usuarios' : 'Usuarios de ${areasSistema[Sesion.area] ?? Sesion.area ?? ''}')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _abrirFormulario(),
         backgroundColor: AppTheme.primary,
@@ -74,11 +80,22 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
                   const SizedBox(height: 16),
                   Expanded(
                     child: lista.isEmpty
-                        ? const Center(child: Text('No hay usuarios con ese criterio.', style: TextStyle(color: AppTheme.textSecondary)))
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Text(
+                                _store.usuarios.isEmpty && !Sesion.esAdmin
+                                    ? 'Aún no hay usuarios en tu área.\nLos que registres aquí solo podrán ver la información de ${areasSistema[Sesion.area] ?? Sesion.area}.'
+                                    : 'No hay usuarios con ese criterio.',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: AppTheme.textSecondary),
+                              ),
+                            ),
+                          )
                         : ListView.builder(
                             padding: const EdgeInsets.only(bottom: 96),
                             itemCount: lista.length,
-                            itemBuilder: (context, i) => _buildTarjeta(lista[i]),
+                            itemBuilder: (context, i) => Aparicion(indice: i, child: _buildTarjeta(lista[i])),
                           ),
                   ),
                 ],
@@ -120,7 +137,13 @@ class _UsuariosScreenState extends State<UsuariosScreen> {
                 Text('@${u.username}${u.puesto.isEmpty ? '' : ' • ${u.puesto}'}',
                     maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                 const SizedBox(height: 4),
-                Text(rolesSistema[u.rol] ?? u.rol, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.info)),
+                Text(
+                  [
+                    rolesSistema[u.rol] ?? u.rol,
+                    if (u.rol == 'Usuario') u.area == null ? 'SIN ÁREA: no puede ver nada' : 'Área: ${areasSistema[u.area] ?? u.area}',
+                  ].join(' • '),
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: u.rol == 'Usuario' && u.area == null ? AppTheme.danger : AppTheme.info),
+                ),
               ],
             ),
           ),
@@ -153,6 +176,7 @@ class _FormularioUsuarioState extends State<_FormularioUsuario> {
   late final TextEditingController _contacto = TextEditingController(text: widget.usuario?.contacto ?? '');
   final TextEditingController _password = TextEditingController();
   late String _rol = rolesSistema.containsKey(widget.usuario?.rol) ? widget.usuario!.rol : 'Usuario';
+  late String? _area = widget.usuario?.area ?? (Sesion.esAdmin ? null : Sesion.area);
   bool _ocultar = true;
   bool _guardando = false;
   String? _error;
@@ -177,6 +201,7 @@ class _FormularioUsuarioState extends State<_FormularioUsuario> {
       rol: _rol,
       puesto: _puesto.text,
       contacto: _contacto.text,
+      area: _area,
       password: _password.text,
     );
     if (!mounted) return;
@@ -227,14 +252,13 @@ class _FormularioUsuarioState extends State<_FormularioUsuario> {
               TextFormField(
                 controller: _password,
                 obscureText: _ocultar,
-                validator: (v) {
-                  final texto = v ?? '';
-                  if (!_editando && texto.length < 8) return 'Mínimo 8 caracteres';
-                  if (_editando && texto.isNotEmpty && texto.length < 8) return 'Mínimo 8 caracteres';
-                  return null;
-                },
+                // Solo letras y números: no se pueden escribir espacios, acentos ni signos
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')), LengthLimitingTextInputFormatter(64)],
+                autocorrect: false,
+                enableSuggestions: false,
+                validator: (v) => validarPassword(v, opcional: _editando),
                 decoration: AppTheme.inputDecoration(
-                  'Mínimo 8 caracteres',
+                  'Letras y números, mínimo 8',
                   icon: Icons.lock_outline,
                   suffix: IconButton(
                     icon: Icon(_ocultar ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
@@ -242,18 +266,56 @@ class _FormularioUsuarioState extends State<_FormularioUsuario> {
                   ),
                 ),
               ),
-              _etiqueta('Rol *'),
-              DropdownButtonFormField<String>(
-                initialValue: _rol,
-                isExpanded: true,
-                decoration: AppTheme.inputDecoration('Rol', icon: Icons.admin_panel_settings_outlined),
-                items: [
-                  for (final r in rolesSistema.entries) DropdownMenuItem(value: r.key, child: Text(r.value, overflow: TextOverflow.ellipsis)),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _rol = v);
-                },
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(reglaPassword, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
               ),
+              if (Sesion.esAdmin) ...[
+                _etiqueta('Rol *'),
+                DropdownButtonFormField<String>(
+                  initialValue: _rol,
+                  isExpanded: true,
+                  decoration: AppTheme.inputDecoration('Rol', icon: Icons.admin_panel_settings_outlined),
+                  items: [
+                    for (final r in rolesSistema.entries) DropdownMenuItem(value: r.key, child: Text(r.value, overflow: TextOverflow.ellipsis)),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => _rol = v);
+                  },
+                ),
+                // Los jefes toman el área de su rol y el Admin no tiene área; un 'Usuario' necesita una
+                if (_rol == 'Usuario') ...[
+                  _etiqueta('Área *'),
+                  DropdownButtonFormField<String>(
+                    initialValue: areasSistema.containsKey(_area) ? _area : null,
+                    isExpanded: true,
+                    decoration: AppTheme.inputDecoration('¿Qué área podrá ver?', icon: Icons.business_outlined),
+                    items: [
+                      for (final a in areasSistema.entries) DropdownMenuItem(value: a.key, child: Text(a.value)),
+                    ],
+                    validator: (v) => v == null ? 'Elige el área' : null,
+                    onChanged: (v) => setState(() => _area = v),
+                  ),
+                ],
+              ] else
+                Container(
+                  margin: const EdgeInsets.only(top: 14),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, size: 18, color: AppTheme.info),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Se registra como Usuario de ${areasSistema[Sesion.area] ?? Sesion.area}: '
+                          'solo podrá ver la información de esa área, sin editar.',
+                          style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               _etiqueta('Puesto / área'),
               TextFormField(controller: _puesto, decoration: AppTheme.inputDecoration('Ej. Almacén', icon: Icons.work_outline)),
               _etiqueta('Contacto'),

@@ -3,6 +3,7 @@ import '../models/catalogos.dart';
 import '../services/catalogos_store.dart';
 import '../utils/app_theme.dart';
 import '../widgets/confirm_dialog.dart';
+import '../widgets/animaciones.dart';
 import '../widgets/contenido_responsivo.dart';
 import '../widgets/safe_number_picker.dart';
 import '../widgets/menu_lateral.dart';
@@ -88,7 +89,7 @@ class _DepartamentosScreenState extends State<DepartamentosScreen> {
                         : ListView.builder(
                             padding: const EdgeInsets.only(bottom: 96),
                             itemCount: lista.length,
-                            itemBuilder: (context, i) => _buildTarjeta(lista[i]),
+                            itemBuilder: (context, i) => Aparicion(indice: i, child: _buildTarjeta(lista[i])),
                           ),
                   ),
                 ],

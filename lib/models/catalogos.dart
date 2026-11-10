@@ -7,6 +7,9 @@ class UsuarioSistema {
   String puesto;
   String contacto;
 
+  /// Proyectos, Compras, Almacen o Evaluacion. Null para el Admin.
+  String? area;
+
   UsuarioSistema({
     required this.id,
     required this.nombre,
@@ -14,6 +17,7 @@ class UsuarioSistema {
     required this.rol,
     this.puesto = '',
     this.contacto = '',
+    this.area,
   });
 
   factory UsuarioSistema.fromJson(Map<String, dynamic> j) => UsuarioSistema(
@@ -23,6 +27,7 @@ class UsuarioSistema {
         rol: j['rol'] as String? ?? 'Usuario',
         puesto: j['puestoTrabajo'] as String? ?? '',
         contacto: j['metodoContacto'] as String? ?? '',
+        area: j['area'] as String?,
       );
 }
 
@@ -33,8 +38,27 @@ const Map<String, String> rolesSistema = {
   'Compras_Admin': 'Jefe de Compras',
   'Almacen_Admin': 'Jefe de Almacén',
   'Evaluacion_Admin': 'Jefe de Evaluación (Recepción)',
-  'Usuario': 'Usuario (solo lectura)',
+  'Usuario': 'Usuario (solo lectura de su área)',
 };
+
+/// Áreas del taller (mismos valores que el backend) con su nombre legible.
+const Map<String, String> areasSistema = {
+  'Proyectos': 'Proyectos',
+  'Compras': 'Compras',
+  'Almacen': 'Almacén',
+  'Evaluacion': 'Evaluación',
+};
+
+/// Área de un rol de jefe; null para Admin y Usuario.
+String? areaDeRol(String rol) => switch (rol) {
+      'Proyecto_Lider' => 'Proyectos',
+      'Compras_Admin' => 'Compras',
+      'Almacen_Admin' => 'Almacen',
+      'Evaluacion_Admin' => 'Evaluacion',
+      _ => null,
+    };
+
+bool esRolJefe(String rol) => areaDeRol(rol) != null;
 
 /// Área operativa del taller.
 class Departamento {

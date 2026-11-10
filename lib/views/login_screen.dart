@@ -132,10 +132,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushReplacement(
         context,
+        // Fundido hacia el dashboard (su cabecera negra continúa la del splash)
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) => DashboardScreen(rol: rolAsignado),
-          transitionDuration: Duration.zero,
-          reverseTransitionDuration: Duration.zero,
+          transitionDuration: const Duration(milliseconds: 450),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+              FadeTransition(opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut), child: child),
         ),
       );
     }

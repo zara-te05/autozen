@@ -9,7 +9,7 @@ namespace Autozen.Api.Controllers;
 /// <summary>Solicitudes de compra de los proyectos y la orden de compra que genera Compras.</summary>
 [ApiController]
 [Route("api/Compra/solicitudes")]
-[Authorize]
+[Authorize(Policy = Lectura.Compras)] // Leer: Admin, jefes y usuarios del área de Compras. Escribir: según cada acción
 public class SolicitudesCompraController : ControllerBase
 {
     private readonly SolicitudesCompraService _servicio;

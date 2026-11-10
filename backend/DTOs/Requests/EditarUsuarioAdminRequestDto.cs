@@ -9,4 +9,5 @@ public class EditarUsuarioAdminRequestDto
     public int? TrabajadorId { get; set; }
     public string? MetodoContacto { get; set; }
     public string? Password { get; set; } // Opcional: si viene vacío, conserva la contraseña actual
+    public string? Area { get; set; }
 }

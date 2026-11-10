@@ -51,6 +51,12 @@ class ComprasStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Deja el store vacío (el usuario no tiene acceso a esta área).
+  void vaciar() {
+    _solicitudes.clear();
+    notifyListeners();
+  }
+
   Future<String?> _enApi(Future<dynamic> Function() llamada) async {
     try {
       await llamada();
